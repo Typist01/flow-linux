@@ -1,0 +1,11 @@
+[package]
+name = "flow-config"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dirs = "6"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+toml = "0.8"
+tracing = "0.1"

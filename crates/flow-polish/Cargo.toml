@@ -1,0 +1,13 @@
+[package]
+name = "flow-polish"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1"
+flow-config = { path = "../flow-config" }
+flow-secrets = { path = "../flow-secrets" }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+tracing = "0.1"

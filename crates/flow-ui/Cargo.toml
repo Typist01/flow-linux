@@ -1,0 +1,13 @@
+[package]
+name = "flow-ui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crossbeam-channel = "0.5"
+muda = { version = "0.19", default-features = false, features = ["gtk"] }
+tracing = "0.1"
+tray-icon = { version = "0.24", default-features = false, features = ["gtk"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"

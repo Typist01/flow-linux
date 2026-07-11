@@ -1,0 +1,10 @@
+[package]
+name = "flow-audio"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cpal = "0.15"
+flow-config = { path = "../flow-config" }
+thiserror = "2"
+tracing = "0.1"

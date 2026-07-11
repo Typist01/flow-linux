@@ -1,0 +1,24 @@
+[package]
+name = "flow-daemon"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "flow-daemon"
+path = "src/main.rs"
+
+[dependencies]
+crossbeam-channel = "0.5"
+flow-audio = { path = "../flow-audio" }
+flow-config = { path = "../flow-config" }
+flow-hotkey = { path = "../flow-hotkey" }
+flow-inject = { path = "../flow-inject" }
+flow-polish = { path = "../flow-polish" }
+flow-settings = { path = "../flow-settings" }
+flow-stt = { path = "../flow-stt" }
+flow-ui = { path = "../flow-ui" }
+fs4 = { version = "0.12", features = ["sync"] }
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

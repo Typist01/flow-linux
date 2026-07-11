@@ -1,0 +1,10 @@
+[package]
+name = "flow-inject"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+flow-config = { path = "../flow-config" }
+thiserror = "2"
+tokio = { version = "1", features = ["process", "time"] }
+tracing = "0.1"
