@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/flow-config",
+    "crates/flow-secrets",
+    "crates/flow-audio",
+    "crates/flow-hotkey",
+    "crates/flow-stt",
+    "crates/flow-polish",
+    "crates/flow-inject",
+    "crates/flow-ui",
+    "crates/flow-settings",
+    "crates/flow-daemon",
+    "spikes/hotkey",
+    "spikes/audio",
+    "spikes/stt",
+]

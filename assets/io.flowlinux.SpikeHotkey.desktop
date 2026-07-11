@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Flow Linux Spike Hotkey
+Comment=Spike 2 — global hotkey validation for Flow Linux
+Exec=flow-daemon
+Icon=preferences-desktop-keyboard-shortcuts
+Terminal=false
+Categories=Utility;
+StartupNotify=false
+NoDisplay=true

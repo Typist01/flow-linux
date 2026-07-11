@@ -1,0 +1,20 @@
+/target/
+**/*.rs.bk
+
+# Spike / test artifacts
+/spikes/*/spike-output.wav
+spike-output.wav
+*.wav
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS
+.DS_Store
+
+# Local secrets (never commit)
+.env
+.env.*

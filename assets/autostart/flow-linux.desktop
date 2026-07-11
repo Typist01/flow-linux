@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Flow Linux
+Comment=Voice dictation daemon for Linux
+Exec=flow-daemon
+Icon=preferences-desktop-keyboard-shortcuts
+Terminal=false
+Categories=Utility;
+StartupNotify=false
+X-KDE-autostart-after=panel

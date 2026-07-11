@@ -1,0 +1,14 @@
+[Unit]
+Description=Flow Linux dictation daemon
+After=graphical-session.target pipewire.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/Projects/flow-linux/target/release/flow-daemon
+Restart=on-failure
+RestartSec=3
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=graphical-session.target
