@@ -1,6 +1,9 @@
 pub mod catalogs;
 
-use catalogs::{LOCAL_WHISPER_MODELS, OPENAI_POLISH_MODELS, OPENAI_STT_MODELS};
+use catalogs::{
+    LOCAL_WHISPER_MODELS, OPENAI_POLISH_MODELS, OPENAI_STT_MODELS, OPENAI_STREAMING_STT_MODELS,
+    STREAMING_DELAYS,
+};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,6 +14,7 @@ pub const SHORTCUT_ID: &str = "flow-dictation";
 pub const DEFAULT_HOTKEY: &str = "Meta+Ctrl+Space";
 
 pub const SAMPLE_RATE: u32 = 16_000;
+pub const STREAMING_SAMPLE_RATE: u32 = 24_000;
 pub const SILENCE_RMS_THRESHOLD: f32 = 0.005;
 pub const PRE_INJECT_DELAY_MS: u64 = 50;
 
@@ -21,6 +25,14 @@ pub enum SttProvider {
     Local,
     Openai,
     Deepgram,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SttMode {
+    #[default]
+    Batch,
+    Streaming,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -36,6 +48,8 @@ pub enum PolishProvider {
 pub struct GeneralConfig {
     #[serde(default = "default_true")]
     pub autostart: bool,
+    #[serde(default = "default_true")]
+    pub show_overlay: bool,
     #[serde(default = "default_log_level")]
     pub log_level: String,
 }
@@ -44,6 +58,7 @@ impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
             autostart: true,
+            show_overlay: true,
             log_level: default_log_level(),
         }
     }
@@ -73,12 +88,18 @@ impl Default for HotkeyConfig {
 pub struct SttConfig {
     #[serde(default)]
     pub provider: SttProvider,
+    #[serde(default)]
+    pub mode: SttMode,
     #[serde(default = "default_model_name")]
     pub model: String,
     #[serde(default = "default_language")]
     pub language: String,
     #[serde(default = "default_openai_stt_model")]
     pub openai_model: String,
+    #[serde(default = "default_streaming_model")]
+    pub streaming_model: String,
+    #[serde(default = "default_streaming_delay")]
+    pub streaming_delay: String,
     #[serde(default = "default_openai_api_key_env")]
     pub openai_api_key_env: String,
 }
@@ -87,16 +108,26 @@ impl Default for SttConfig {
     fn default() -> Self {
         Self {
             provider: SttProvider::Local,
+            mode: SttMode::Batch,
             model: default_model_name(),
             language: default_language(),
             openai_model: default_openai_stt_model(),
+            streaming_model: default_streaming_model(),
+            streaming_delay: default_streaming_delay(),
             openai_api_key_env: default_openai_api_key_env(),
         }
     }
 }
 
 impl SttConfig {
+    pub fn is_streaming(&self) -> bool {
+        self.mode == SttMode::Streaming
+    }
+
     pub fn active_model(&self) -> &str {
+        if self.is_streaming() {
+            return &self.streaming_model;
+        }
         match self.provider {
             SttProvider::Local => &self.model,
             SttProvider::Openai => &self.openai_model,
@@ -105,11 +136,18 @@ impl SttConfig {
     }
 
     pub fn available_models(&self) -> &'static [&'static str] {
+        if self.is_streaming() {
+            return OPENAI_STREAMING_STT_MODELS;
+        }
         match self.provider {
             SttProvider::Local => LOCAL_WHISPER_MODELS,
             SttProvider::Openai => OPENAI_STT_MODELS,
             SttProvider::Deepgram => &[],
         }
+    }
+
+    pub fn available_streaming_delays(&self) -> &'static [&'static str] {
+        STREAMING_DELAYS
     }
 }
 
@@ -271,7 +309,15 @@ impl Config {
     }
 
     fn normalize(&mut self) {
-        if !self.stt.available_models().contains(&self.stt.active_model()) {
+        if self.stt.mode == SttMode::Streaming {
+            self.stt.provider = SttProvider::Openai;
+            if !OPENAI_STREAMING_STT_MODELS.contains(&self.stt.streaming_model.as_str()) {
+                self.stt.streaming_model = default_streaming_model();
+            }
+            if !STREAMING_DELAYS.contains(&self.stt.streaming_delay.as_str()) {
+                self.stt.streaming_delay = default_streaming_delay();
+            }
+        } else if !self.stt.available_models().contains(&self.stt.active_model()) {
             if let Some(first) = self.stt.available_models().first() {
                 match self.stt.provider {
                     SttProvider::Local => self.stt.model = (*first).to_string(),
@@ -385,6 +431,14 @@ fn default_openai_stt_model() -> String {
     "gpt-4o-mini-transcribe".to_string()
 }
 
+fn default_streaming_model() -> String {
+    "gpt-realtime-whisper".to_string()
+}
+
+fn default_streaming_delay() -> String {
+    "low".to_string()
+}
+
 fn default_openai_api_key_env() -> String {
     "OPENAI_API_KEY".to_string()
 }
@@ -399,4 +453,54 @@ fn default_ollama_model() -> String {
 
 fn default_openai_polish_model() -> String {
     "gpt-4o-mini".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_mode_is_batch() {
+        let config = Config::default();
+        assert_eq!(config.stt.mode, SttMode::Batch);
+        assert!(!config.stt.is_streaming());
+    }
+
+    #[test]
+    fn streaming_normalize_forces_openai_and_valid_model() {
+        let mut config = Config::default();
+        config.stt.mode = SttMode::Streaming;
+        config.stt.provider = SttProvider::Local;
+        config.stt.streaming_model = "not-a-model".into();
+        config.stt.streaming_delay = "nope".into();
+        config.normalize();
+        assert_eq!(config.stt.provider, SttProvider::Openai);
+        assert_eq!(config.stt.streaming_model, "gpt-realtime-whisper");
+        assert_eq!(config.stt.streaming_delay, "low");
+    }
+
+    #[test]
+    fn missing_mode_deserializes_as_batch() {
+        let toml = r#"
+[stt]
+provider = "openai"
+openai_model = "gpt-4o-mini-transcribe"
+"#;
+        let config: Config = toml::from_str(toml).expect("parse");
+        assert_eq!(config.stt.mode, SttMode::Batch);
+        assert_eq!(config.stt.streaming_model, "gpt-realtime-whisper");
+    }
+
+    #[test]
+    fn show_overlay_defaults_true() {
+        let config = Config::default();
+        assert!(config.general.show_overlay);
+
+        let toml = r#"
+[general]
+autostart = true
+"#;
+        let config: Config = toml::from_str(toml).expect("parse");
+        assert!(config.general.show_overlay);
+    }
 }

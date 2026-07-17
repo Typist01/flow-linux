@@ -1,4 +1,5 @@
 mod openai;
+mod realtime;
 mod wav;
 mod whisper;
 
@@ -7,6 +8,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 pub use openai::OpenAiSttEngine;
+pub use realtime::{RealtimeError, RealtimeTranscriptionSession, StreamingEvent};
 pub use whisper::WhisperEngine;
 
 /// Speech-to-text backend. Local engines use `spawn_blocking`; cloud engines use HTTP.
@@ -26,9 +28,12 @@ pub enum SttError {
     NotImplemented(SttProvider),
     #[error("cloud STT: {0}")]
     Cloud(String),
+    #[error("realtime STT: {0}")]
+    Realtime(#[from] RealtimeError),
 }
 
 pub fn build_stt_engine(config: &Config) -> Result<Arc<dyn SttEngine>, SttError> {
+    // Streaming uses RealtimeTranscriptionSession directly; batch engines only here.
     match config.stt.provider {
         SttProvider::Local => Ok(Arc::new(WhisperEngine::new(config)?)),
         SttProvider::Openai => Ok(Arc::new(OpenAiSttEngine::new(config)?)),

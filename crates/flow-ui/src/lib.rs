@@ -1,3 +1,6 @@
+mod notify;
+mod overlay;
+
 use crossbeam_channel::{Receiver, Sender};
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -5,6 +8,9 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder, TrayIconEvent};
+
+pub use notify::notify_error;
+pub use overlay::{OverlayEvent, OverlayHandle};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayState {

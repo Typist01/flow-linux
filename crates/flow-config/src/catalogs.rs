@@ -6,6 +6,10 @@ pub const OPENAI_STT_MODELS: &[&str] = &[
     "whisper-1",
 ];
 
+pub const OPENAI_STREAMING_STT_MODELS: &[&str] = &["gpt-realtime-whisper"];
+
+pub const STREAMING_DELAYS: &[&str] = &["minimal", "low", "medium", "high", "xhigh"];
+
 pub const OPENAI_POLISH_MODELS: &[&str] = &[
     "gpt-4o-mini",
     "gpt-4o",
@@ -19,6 +23,13 @@ pub fn stt_provider_label(provider: crate::SttProvider) -> &'static str {
         crate::SttProvider::Local => "Local (Whisper.cpp)",
         crate::SttProvider::Openai => "OpenAI",
         crate::SttProvider::Deepgram => "Deepgram (coming soon)",
+    }
+}
+
+pub fn stt_mode_label(mode: crate::SttMode) -> &'static str {
+    match mode {
+        crate::SttMode::Batch => "Batch (upload on release)",
+        crate::SttMode::Streaming => "Streaming (live while held)",
     }
 }
 

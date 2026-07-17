@@ -1,0 +1,17 @@
+[package]
+name = "flow-spike-realtime"
+version = "0.0.1"
+edition = "2021"
+
+[[bin]]
+name = "flow-spike-realtime"
+path = "src/main.rs"
+
+[dependencies]
+flow-audio = { path = "../../crates/flow-audio" }
+flow-config = { path = "../../crates/flow-config" }
+flow-secrets = { path = "../../crates/flow-secrets" }
+flow-stt = { path = "../../crates/flow-stt" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -5,11 +5,16 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1"
+base64 = "0.22"
+flow-audio = { path = "../flow-audio" }
 flow-config = { path = "../flow-config" }
 flow-secrets = { path = "../flow-secrets" }
+futures-util = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["rt"] }
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 tracing = "0.1"
 whisper-rs = "0.16"

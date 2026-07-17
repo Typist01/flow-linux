@@ -9,4 +9,3 @@ eframe = { version = "0.31", default-features = false, features = ["default_font
 flow-config = { path = "../flow-config" }
 flow-secrets = { path = "../flow-secrets" }
 tracing = "0.1"
-winit = { version = "0.30", default-features = false, features = ["wayland", "x11", "rwh_06"] }

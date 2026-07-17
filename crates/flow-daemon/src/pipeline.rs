@@ -10,6 +10,8 @@ pub enum PipelineError {
     Polish(#[from] flow_polish::PolishError),
     #[error("injection failed: {0}")]
     Inject(String),
+    #[error("realtime STT: {0}")]
+    Realtime(#[from] flow_stt::RealtimeError),
 }
 
 pub async fn run_dictation_pipeline(
@@ -17,7 +19,13 @@ pub async fn run_dictation_pipeline(
     samples: Vec<f32>,
 ) -> Result<String, PipelineError> {
     let raw = engines.stt.transcribe(&samples).await?;
+    finish_transcript(engines, raw).await
+}
 
+pub async fn finish_transcript(
+    engines: &EngineSet,
+    raw: String,
+) -> Result<String, PipelineError> {
     if raw.is_empty() {
         return Ok(String::new());
     }
