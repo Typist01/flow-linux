@@ -1,5 +1,6 @@
 mod notify;
 mod overlay;
+mod theme;
 
 use crossbeam_channel::{Receiver, Sender};
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
@@ -11,6 +12,7 @@ use tray_icon::{Icon, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 pub use notify::notify_error;
 pub use overlay::{OverlayEvent, OverlayHandle};
+pub use theme::apply_signal_theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayState {
@@ -148,9 +150,9 @@ fn build_tray(enabled: &Arc<AtomicBool>) -> Result<TrayIcon, String> {
 
 fn toggle_label(enabled: &Arc<AtomicBool>) -> String {
     if enabled.load(Ordering::Relaxed) {
-        "Disable dictation".to_string()
+        "Pause dictation".to_string()
     } else {
-        "Enable dictation".to_string()
+        "Resume dictation".to_string()
     }
 }
 
@@ -166,16 +168,33 @@ fn update_tray_icon(tray: &TrayIcon, state: TrayState) {
 }
 
 fn icon_for_state(state: TrayState) -> Icon {
-    let (r, g, b) = match state {
-        TrayState::Idle => (140, 140, 140),
-        TrayState::Listening => (220, 60, 60),
-        TrayState::Processing => (240, 180, 40),
-        TrayState::Error => (220, 100, 40),
+    let bytes: &[u8] = match state {
+        TrayState::Idle => include_bytes!("../../../assets/icons/tray-idle.png"),
+        TrayState::Listening => include_bytes!("../../../assets/icons/tray-listening.png"),
+        TrayState::Processing => include_bytes!("../../../assets/icons/tray-processing.png"),
+        TrayState::Error => include_bytes!("../../../assets/icons/tray-error.png"),
     };
-    solid_icon(r, g, b)
+    png_to_icon(bytes).unwrap_or_else(|e| {
+        tracing::error!(error = %e, "failed to decode tray icon — using fallback");
+        solid_fallback(state)
+    })
 }
 
-fn solid_icon(r: u8, g: u8, b: u8) -> Icon {
+fn png_to_icon(bytes: &[u8]) -> Result<Icon, String> {
+    let img = image::load_from_memory(bytes)
+        .map_err(|e| e.to_string())?
+        .into_rgba8();
+    let (w, h) = img.dimensions();
+    Icon::from_rgba(img.into_raw(), w, h).map_err(|e| e.to_string())
+}
+
+fn solid_fallback(state: TrayState) -> Icon {
+    let (r, g, b) = match state {
+        TrayState::Idle => (0x2B, 0xB8, 0xA8),
+        TrayState::Listening => (0xE4, 0x57, 0x4D),
+        TrayState::Processing => (0xE0, 0xA8, 0x4A),
+        TrayState::Error => (0xE0, 0x70, 0x40),
+    };
     let size = 22usize;
     let mut rgba = vec![0u8; size * size * 4];
     for px in rgba.chunks_exact_mut(4) {

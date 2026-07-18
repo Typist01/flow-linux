@@ -1,11 +1,12 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Flow Linux Spike Hotkey
-Comment=Spike 2 — global hotkey validation for Flow Linux
+Name=Flow Linux
+Comment=Voice dictation for Linux — hold hotkey, speak, release
 Exec=flow-daemon
-Icon=preferences-desktop-keyboard-shortcuts
+Icon=flow-linux
 Terminal=false
-Categories=Utility;
+Categories=Utility;Accessibility;
 StartupNotify=false
 NoDisplay=true
+X-GNOME-UsesNotifications=true

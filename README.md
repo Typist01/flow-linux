@@ -7,11 +7,11 @@ Wispr Flow-like voice dictation for Linux — hold a global hotkey, speak, relea
 ## Features
 
 - Push-to-talk global hotkey (KDE GlobalShortcuts portal)
-- **STT:** local Whisper.cpp or OpenAI (`gpt-4o-mini-transcribe`, `gpt-4o-transcribe`, `whisper-1`)
-- **Polish (optional):** OpenAI chat models (`gpt-4.1-nano`, `gpt-4o-mini`, …)
-- System tray with idle / listening / processing states
-- Settings window (provider + model pickers, API key validation)
-- API keys stored in KDE Wallet via system keyring
+- **STT:** batch (local Whisper / OpenAI file) or **streaming** (`gpt-realtime-whisper`)
+- **Polish (optional):** OpenAI chat models (`gpt-4.1-nano`, `gpt-4o-mini`, …) on final transcript only
+- Signal tray icon + Flow Capsule listening overlay (live partials in streaming mode)
+- Settings instrument panel (Ready status, mode, models, BYOK key storage)
+- **BYOK:** API keys are never shipped — Settings/keyring or `OPENAI_API_KEY` only
 - Single-instance daemon lock, systemd user service, autostart
 
 ## Quick start
@@ -57,7 +57,8 @@ provider = "openai"
 openai_model = "gpt-4.1-nano"
 ```
 
-API keys: Settings UI (keyring) or `OPENAI_API_KEY` env var fallback.
+**BYOK — no API keys are included in builds or AppImages.**  
+Configure via tray → **Settings…** → Voice (system keyring) or export `OPENAI_API_KEY`.
 
 ## Local Whisper model
 
@@ -124,6 +125,20 @@ export PATH="$HOME/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
 export CARGO_TARGET_DIR="$PWD/target"
 ```
 
+## Distribute (AppImage scaffold)
+
+```bash
+./scripts/check-no-secrets.sh
+./packaging/appimage/build-appimage.sh
+```
+
+Stages `packaging/appimage/AppDir`. If `linuxdeploy` and `appimagetool` are on `PATH`, also writes  
+`packaging/appimage/out/Flow_Linux-x86_64.AppImage`.
+
+**Host packages still required:** PipeWire, `wl-clipboard`, `ydotool` (+ user service), `libsecret`, desktop portal (GlobalShortcuts).
+
+Font/icon licenses: see [`assets/ATTRIBUTIONS.md`](assets/ATTRIBUTIONS.md).
+
 ## License
 
-MIT OR Apache-2.0 (see individual crate manifests).
+MIT OR Apache-2.0 (see individual crate manifests). Fonts under SIL OFL (see attributions).

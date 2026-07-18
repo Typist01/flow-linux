@@ -1,3 +1,4 @@
+use crate::theme::{self, AMBER, EMBER, TEAL, TEXT};
 use crossbeam_channel::{Receiver, Sender};
 use eframe::egui;
 use flow_settings::{register_settings_opener, SettingsApp};
@@ -109,7 +110,10 @@ fn run_ui_loop(cmd_rx: Receiver<UiCommand>, enabled: Arc<AtomicBool>, reload_tx:
     if let Err(error) = eframe::run_native(
         "Flow Linux",
         options,
-        Box::new(move |_cc| Ok(Box::new(UiApp::new(cmd_rx, enabled, reload_tx)))),
+        Box::new(move |cc| {
+            theme::apply_signal_theme(&cc.egui_ctx);
+            Ok(Box::new(UiApp::new(cmd_rx, enabled, reload_tx)))
+        }),
     ) {
         tracing::error!(%error, "UI event loop failed");
     }
@@ -227,8 +231,8 @@ impl UiApp {
             egui::ViewportId::from_hash_of("flow_settings"),
             egui::ViewportBuilder::default()
                 .with_title("Flow Linux Settings")
-                .with_inner_size([520.0, 620.0])
-                .with_min_inner_size([420.0, 480.0])
+                .with_inner_size([720.0, 560.0])
+                .with_min_inner_size([560.0, 420.0])
                 .with_active(true)
                 .with_decorations(true)
                 .with_taskbar(true)
@@ -240,11 +244,11 @@ impl UiApp {
                     "unexpected viewport class"
                 );
 
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    egui::ScrollArea::vertical().show(ui, |ui| {
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::NONE.fill(theme::BG).inner_margin(12.0))
+                    .show(ctx, |ui| {
                         settings.ui(ui);
                     });
-                });
 
                 if ctx.input(|i| i.viewport().close_requested()) {
                     still_open = false;
@@ -278,79 +282,126 @@ impl eframe::App for UiApp {
             return;
         }
 
+        let accent = if self.processing {
+            AMBER
+        } else if self.streaming {
+            EMBER
+        } else {
+            TEAL
+        };
+
         egui::CentralPanel::default()
             .frame(
                 egui::Frame::NONE
-                    .fill(egui::Color32::from_rgba_unmultiplied(28, 28, 32, 230))
-                    .corner_radius(18.0)
-                    .inner_margin(egui::Margin::symmetric(14, 8)),
+                    .fill(egui::Color32::from_rgba_unmultiplied(0x1A, 0x1D, 0x24, 230))
+                    .corner_radius(20.0)
+                    .inner_margin(egui::Margin::symmetric(14, 8))
+                    .stroke(egui::Stroke::new(1.0_f32, accent.gamma_multiply(0.45))),
             )
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        let status = if self.processing {
-                            "Processing…"
-                        } else if self.streaming {
-                            "Listening (live)"
-                        } else {
-                            "Listening…"
-                        };
-                        ui.label(
-                            egui::RichText::new(status)
-                                .size(12.0)
-                                .color(egui::Color32::from_rgb(230, 90, 90)),
+                // RTL: allocate bars first so they stay pinned to the right edge.
+                // Text then fills whatever space remains on the left (with a gap).
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    draw_bars(ui, &self.bars, accent);
+                    ui.add_space(12.0);
+
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        draw_mark(ui, accent);
+                        ui.add_space(8.0);
+
+                        let text_w = ui.available_width().max(80.0);
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(text_w, ui.available_height()),
+                            egui::Layout::top_down(egui::Align::LEFT),
+                            |ui| {
+                                ui.set_max_width(text_w);
+                                let status = if self.processing {
+                                    "Finalizing…"
+                                } else if !self.partial.is_empty() {
+                                    ""
+                                } else if self.streaming {
+                                    "Waiting for speech"
+                                } else {
+                                    "Listening"
+                                };
+
+                                if !status.is_empty() {
+                                    ui.label(
+                                        egui::RichText::new(status).size(11.0).color(accent),
+                                    );
+                                }
+
+                                let display = if self.processing && self.partial.is_empty() {
+                                    String::new()
+                                } else if !self.partial.is_empty() {
+                                    let max_chars = ((text_w / 7.0) as usize).clamp(12, 48);
+                                    truncate_middle(&self.partial, max_chars)
+                                } else {
+                                    String::new()
+                                };
+
+                                if !display.is_empty() {
+                                    ui.add(
+                                        egui::Label::new(
+                                            egui::RichText::new(display).size(13.5).color(TEXT),
+                                        )
+                                        .truncate(),
+                                    );
+                                } else if status.is_empty() {
+                                    ui.label(
+                                        egui::RichText::new("Listening").size(11.0).color(accent),
+                                    );
+                                }
+                            },
                         );
-
-                        let display = if self.processing {
-                            if self.partial.is_empty() {
-                                "Finalizing…".to_string()
-                            } else {
-                                truncate_middle(&self.partial, 52)
-                            }
-                        } else if self.partial.is_empty() {
-                            if self.streaming {
-                                "Speak…".to_string()
-                            } else {
-                                String::new()
-                            }
-                        } else {
-                            truncate_middle(&self.partial, 52)
-                        };
-
-                        if !display.is_empty() {
-                            ui.label(
-                                egui::RichText::new(display)
-                                    .size(13.0)
-                                    .color(egui::Color32::from_rgb(235, 235, 240)),
-                            );
-                        }
-                    });
-
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.add_space(4.0);
-                        draw_bars(ui, &self.bars);
                     });
                 });
             });
     }
 }
 
-fn draw_bars(ui: &mut egui::Ui, bars: &[f32; BAR_COUNT]) {
+fn draw_mark(ui: &mut egui::Ui, color: egui::Color32) {
+    let size = egui::vec2(22.0, 22.0);
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let painter = ui.painter();
+    let y = rect.center().y;
+    let x0 = rect.left() + 2.0;
+    let x1 = rect.right() - 2.0;
+    let amp = 6.0;
+    let mut points = Vec::new();
+    for i in 0..=24 {
+        let t = i as f32 / 24.0;
+        let x = x0 + (x1 - x0) * t;
+        let wave = ((t * std::f32::consts::PI * 3.0).sin()) * amp * (t * std::f32::consts::PI).sin().abs().max(0.25);
+        points.push(egui::pos2(x, y - wave));
+    }
+    painter.add(egui::Shape::line(points, egui::Stroke::new(2.0_f32, color)));
+}
+
+fn bar_strip_width() -> f32 {
+    let width = 3.5_f32;
+    let gap = 2.5_f32;
+    BAR_COUNT as f32 * (width + gap)
+}
+
+fn draw_bars(ui: &mut egui::Ui, bars: &[f32; BAR_COUNT], color: egui::Color32) {
     let height = 28.0;
-    let width = 4.0;
-    let gap = 3.0;
-    let total_w = BAR_COUNT as f32 * (width + gap);
+    let width = 3.5;
+    let gap = 2.5;
+    let total_w = bar_strip_width();
     let (rect, _response) =
         ui.allocate_exact_size(egui::vec2(total_w, height), egui::Sense::hover());
     let painter = ui.painter();
     for (i, &level) in bars.iter().enumerate() {
-        let bar_h = height * level;
+        // Slight organic height variation
+        let jitter = 0.85 + ((i as f32 * 1.7).sin().abs() * 0.15);
+        let bar_h = (height * level * jitter).max(3.0);
         let x = rect.left() + i as f32 * (width + gap);
         let y = rect.bottom() - bar_h;
         painter.rect_filled(
             egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(width, bar_h)),
             2.0,
-            egui::Color32::from_rgb(220, 80, 80),
+            color,
         );
     }
 }

@@ -5,7 +5,8 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/Projects/flow-linux/target/release/flow-daemon
+# Install the binary to ~/.local/bin or set ExecStart to your AppImage path.
+ExecStart=%h/.local/bin/flow-daemon
 Restart=on-failure
 RestartSec=3
 Environment=RUST_LOG=info

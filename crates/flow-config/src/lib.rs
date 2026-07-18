@@ -436,7 +436,7 @@ fn default_streaming_model() -> String {
 }
 
 fn default_streaming_delay() -> String {
-    "low".to_string()
+    "minimal".to_string()
 }
 
 fn default_openai_api_key_env() -> String {
@@ -476,7 +476,7 @@ mod tests {
         config.normalize();
         assert_eq!(config.stt.provider, SttProvider::Openai);
         assert_eq!(config.stt.streaming_model, "gpt-realtime-whisper");
-        assert_eq!(config.stt.streaming_delay, "low");
+        assert_eq!(config.stt.streaming_delay, "minimal");
     }
 
     #[test]
