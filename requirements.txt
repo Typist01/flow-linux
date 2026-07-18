@@ -1,0 +1,11 @@
+# Core runtime dependencies
+faster-whisper>=1.0.0
+sounddevice>=0.4.6
+numpy>=1.24
+pynput>=1.7
+
+# Optional: GPU acceleration (uncomment if you have an NVIDIA GPU with CUDA)
+# torch>=2.0
+
+# Optional: clipboard fallback
+# pyperclip>=1.8
