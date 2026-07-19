@@ -22,7 +22,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::process::exit(1);
     }
 
-    let fixture = std::env::args().nth(1).unwrap_or_else(|| "spike-output.wav".to_string());
+    let fixture = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "spike-output.wav".to_string());
     if !std::path::Path::new(&fixture).exists() {
         eprintln!("WAV fixture not found: {fixture}");
         eprintln!("Run Spike 3 first to create spike-output.wav, or pass a path argument.");

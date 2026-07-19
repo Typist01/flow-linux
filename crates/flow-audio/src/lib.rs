@@ -113,8 +113,7 @@ impl AudioCapture {
             return None;
         }
 
-        let rms =
-            (samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32).sqrt();
+        let rms = (samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32).sqrt();
         tracing::debug!(samples = samples.len(), rms, "recording stopped");
 
         if rms < SILENCE_RMS_THRESHOLD {

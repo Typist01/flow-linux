@@ -1,7 +1,7 @@
 pub mod catalogs;
 
 use catalogs::{
-    LOCAL_WHISPER_MODELS, OPENAI_POLISH_MODELS, OPENAI_STT_MODELS, OPENAI_STREAMING_STT_MODELS,
+    LOCAL_WHISPER_MODELS, OPENAI_POLISH_MODELS, OPENAI_STREAMING_STT_MODELS, OPENAI_STT_MODELS,
     STREAMING_DELAYS,
 };
 use serde::{Deserialize, Serialize};
@@ -102,6 +102,10 @@ pub struct SttConfig {
     pub streaming_delay: String,
     #[serde(default = "default_openai_api_key_env")]
     pub openai_api_key_env: String,
+    #[serde(default = "default_openai_api_base")]
+    pub openai_api_base: String,
+    #[serde(default = "default_openai_realtime_url")]
+    pub openai_realtime_url: String,
 }
 
 impl Default for SttConfig {
@@ -115,6 +119,8 @@ impl Default for SttConfig {
             streaming_model: default_streaming_model(),
             streaming_delay: default_streaming_delay(),
             openai_api_key_env: default_openai_api_key_env(),
+            openai_api_base: default_openai_api_base(),
+            openai_realtime_url: default_openai_realtime_url(),
         }
     }
 }
@@ -165,6 +171,8 @@ pub struct PolishConfig {
     pub openai_model: String,
     #[serde(default = "default_openai_api_key_env")]
     pub openai_api_key_env: String,
+    #[serde(default = "default_openai_api_base")]
+    pub openai_api_base: String,
 }
 
 impl Default for PolishConfig {
@@ -176,6 +184,7 @@ impl Default for PolishConfig {
             ollama_model: default_ollama_model(),
             openai_model: default_openai_polish_model(),
             openai_api_key_env: default_openai_api_key_env(),
+            openai_api_base: default_openai_api_base(),
         }
     }
 }
@@ -317,7 +326,11 @@ impl Config {
             if !STREAMING_DELAYS.contains(&self.stt.streaming_delay.as_str()) {
                 self.stt.streaming_delay = default_streaming_delay();
             }
-        } else if !self.stt.available_models().contains(&self.stt.active_model()) {
+        } else if !self
+            .stt
+            .available_models()
+            .contains(&self.stt.active_model())
+        {
             if let Some(first) = self.stt.available_models().first() {
                 match self.stt.provider {
                     SttProvider::Local => self.stt.model = (*first).to_string(),
@@ -443,6 +456,14 @@ fn default_openai_api_key_env() -> String {
     "OPENAI_API_KEY".to_string()
 }
 
+fn default_openai_api_base() -> String {
+    "https://api.openai.com/v1".to_string()
+}
+
+fn default_openai_realtime_url() -> String {
+    "wss://api.openai.com/v1/realtime?intent=transcription".to_string()
+}
+
 fn default_ollama_url() -> String {
     "http://localhost:11434".to_string()
 }
@@ -489,6 +510,12 @@ openai_model = "gpt-4o-mini-transcribe"
         let config: Config = toml::from_str(toml).expect("parse");
         assert_eq!(config.stt.mode, SttMode::Batch);
         assert_eq!(config.stt.streaming_model, "gpt-realtime-whisper");
+        assert_eq!(config.stt.openai_api_base, "https://api.openai.com/v1");
+        assert_eq!(
+            config.stt.openai_realtime_url,
+            "wss://api.openai.com/v1/realtime?intent=transcription"
+        );
+        assert_eq!(config.polish.openai_api_base, "https://api.openai.com/v1");
     }
 
     #[test]

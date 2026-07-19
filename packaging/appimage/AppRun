@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APPDIR="${APPDIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+SELF="${APPIMAGE:-$APPDIR/AppRun}"
+BINARY="$APPDIR/usr/bin/flow-daemon"
+APP_ID="io.flowlinux.SpikeHotkey"
+
+show_help() {
+  cat <<'EOF'
+Flow Linux AppImage
+
+Usage:
+  Flow_Linux-x86_64.AppImage            Run the daemon
+  Flow_Linux-x86_64.AppImage --install  Install user service, portal desktop file, and autostart
+  Flow_Linux-x86_64.AppImage --help     Show this help
+
+Host runtime dependencies (not bundled):
+  - PipeWire (microphone capture)
+  - wl-clipboard
+  - ydotool (+ user service)
+  - libsecret / KDE Wallet
+  - xdg-desktop-portal with GlobalShortcuts support
+
+BYOK: no API keys are included. Configure via Settings or OPENAI_API_KEY.
+Supported target: KDE Wayland first; other Linux desktops are experimental.
+EOF
+}
+
+install_desktop_file() {
+  local source="$1"
+  local dest="$2"
+  local exec_path="$3"
+
+  mkdir -p "$(dirname "$dest")"
+  sed -E "s|^Exec=.*|Exec=$exec_path|" "$source" > "$dest"
+}
+
+install_user_files() {
+  local exec_path="$SELF"
+  if [[ "$exec_path" == "$APPDIR/AppRun" && -x "$BINARY" ]]; then
+    exec_path="$BINARY"
+  fi
+
+  local app_dir="$HOME/.local/share/applications"
+  local systemd_dir="$HOME/.config/systemd/user"
+  local autostart_dir="$HOME/.config/autostart"
+  local portal_desktop="$app_dir/$APP_ID.desktop"
+  local service_file="$systemd_dir/flow-daemon.service"
+  local autostart_file="$autostart_dir/flow-linux.desktop"
+
+  mkdir -p "$app_dir" "$systemd_dir" "$autostart_dir"
+
+  install_desktop_file "$APPDIR/usr/share/applications/flow-linux.desktop" "$portal_desktop" "$exec_path"
+  install_desktop_file "$APPDIR/usr/share/applications/flow-linux.desktop" "$autostart_file" "$exec_path"
+
+  cat > "$service_file" <<EOF
+[Unit]
+Description=Flow Linux dictation daemon
+After=graphical-session.target pipewire.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=$exec_path
+Restart=on-failure
+RestartSec=3
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=graphical-session.target
+EOF
+
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$app_dir" 2>/dev/null || true
+  fi
+
+  systemctl --user daemon-reload
+
+  cat <<EOF
+Installed Flow Linux user files:
+  Portal desktop: $portal_desktop
+  systemd unit:   $service_file
+  Autostart:      $autostart_file
+
+Next:
+  systemctl --user enable --now flow-daemon.service
+
+Host deps still required:
+  PipeWire, wl-clipboard, ydotool (+ user service), libsecret, xdg-desktop-portal.
+EOF
+}
+
+case "${1:-}" in
+  --help|-h)
+    show_help
+    ;;
+  --install)
+    install_user_files
+    ;;
+  *)
+    exec "$BINARY" "$@"
+    ;;
+esac

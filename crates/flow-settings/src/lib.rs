@@ -81,7 +81,10 @@ impl SettingsApp {
             && !has_stored_key
             && !has_env_key
         {
-            self.set_status("OpenAI API key is required for cloud / streaming STT", false);
+            self.set_status(
+                "OpenAI API key is required for cloud / streaming STT",
+                false,
+            );
             return;
         }
 
@@ -119,9 +122,12 @@ impl SettingsApp {
 
     fn validate_key(&mut self) {
         let result = if !self.openai_api_key.trim().is_empty() {
-            validate_openai_api_key(&self.openai_api_key)
+            validate_openai_api_key(&self.openai_api_key, &self.config.stt.openai_api_base)
         } else {
-            validate_configured_openai_api_key(&self.config.stt.openai_api_key_env)
+            validate_configured_openai_api_key(
+                &self.config.stt.openai_api_key_env,
+                &self.config.stt.openai_api_base,
+            )
         };
 
         match result {
@@ -154,11 +160,7 @@ impl SettingsApp {
 
         ui.add_space(12.0);
         if let Some((message, success)) = &self.status_message {
-            let color = if *success {
-                TEAL
-            } else {
-                EMBER
-            };
+            let color = if *success { TEAL } else { EMBER };
             ui.colored_label(color, message);
         }
 
@@ -270,10 +272,7 @@ impl SettingsApp {
                 } else {
                     egui::RichText::new(label)
                 };
-                if ui
-                    .add(egui::SelectableLabel::new(selected, text))
-                    .clicked()
-                {
+                if ui.add(egui::SelectableLabel::new(selected, text)).clicked() {
                     self.page = page;
                 }
             }
@@ -309,7 +308,8 @@ impl SettingsApp {
                     (SttMode::Batch, SttProvider::Local)
                 ),
         );
-        if self.config.stt.mode == SttMode::Batch && self.config.stt.provider == SttProvider::Local {
+        if self.config.stt.mode == SttMode::Batch && self.config.stt.provider == SttProvider::Local
+        {
             let ok = self.config.model_path().exists();
             status_row(
                 ui,
@@ -588,9 +588,7 @@ impl SettingsApp {
         ui.label("License: see repository LICENSE / OFL fonts in assets/ATTRIBUTIONS.md");
         ui.add_space(8.0);
         ui.label(egui::RichText::new("Bring your own key (BYOK)").strong());
-        ui.label(
-            "No API keys are bundled. Keys live in your system keyring or OPENAI_API_KEY.",
-        );
+        ui.label("No API keys are bundled. Keys live in your system keyring or OPENAI_API_KEY.");
         ui.add_space(8.0);
         ui.label(
             egui::RichText::new("Host deps for distribution: PipeWire, wl-clipboard, ydotool, libsecret, desktop portal.")
@@ -606,12 +604,7 @@ fn chip(ui: &mut egui::Ui, text: &str, accent: egui::Color32) {
         .corner_radius(8.0)
         .inner_margin(egui::Margin::symmetric(8, 4))
         .show(ui, |ui| {
-            ui.label(
-                egui::RichText::new(text)
-                    .small()
-                    .color(accent)
-                    .monospace(),
-            );
+            ui.label(egui::RichText::new(text).small().color(accent).monospace());
         });
 }
 

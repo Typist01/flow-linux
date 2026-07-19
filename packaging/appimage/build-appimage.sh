@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 APPDIR="$ROOT/packaging/appimage/AppDir"
 OUT_DIR="$ROOT/packaging/appimage/out"
+APPIMAGE_NAME="Flow_Linux-x86_64.AppImage"
 
 export PATH="${HOME}/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:${PATH:-}"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
@@ -26,7 +27,8 @@ cp "$ROOT/assets/icons/flow-linux-256.png" \
 # AppImage runtime expects a top-level desktop + .DirIcon sometimes
 cp -f "$APPDIR/usr/share/applications/flow-linux.desktop" "$APPDIR/flow-linux.desktop"
 cp -f "$APPDIR/usr/share/icons/hicolor/256x256/apps/flow-linux.png" "$APPDIR/.DirIcon"
-ln -sfn usr/bin/flow-daemon "$APPDIR/AppRun"
+rm -f "$APPDIR/AppRun"
+install -m 0755 "$ROOT/packaging/appimage/AppRun" "$APPDIR/AppRun"
 
 echo "==> Secret scan"
 "$ROOT/scripts/check-no-secrets.sh"
@@ -48,8 +50,10 @@ if command -v linuxdeploy >/dev/null 2>&1 && command -v appimagetool >/dev/null 
   linuxdeploy --appdir="$APPDIR" --executable="$APPDIR/usr/bin/flow-daemon" \
     --desktop-file="$APPDIR/usr/share/applications/flow-linux.desktop" \
     --icon-file="$APPDIR/usr/share/icons/hicolor/256x256/apps/flow-linux.png"
-  appimagetool "$APPDIR" "$OUT_DIR/Flow_Linux-x86_64.AppImage"
-  echo "Wrote $OUT_DIR/Flow_Linux-x86_64.AppImage"
+  appimagetool "$APPDIR" "$OUT_DIR/$APPIMAGE_NAME"
+  (cd "$OUT_DIR" && sha256sum "$APPIMAGE_NAME" > sha256sums.txt)
+  echo "Wrote $OUT_DIR/$APPIMAGE_NAME"
+  echo "Wrote $OUT_DIR/sha256sums.txt"
 else
   echo "AppDir staged at: $APPDIR"
   echo "Install linuxdeploy + appimagetool to produce a .AppImage, then re-run this script."

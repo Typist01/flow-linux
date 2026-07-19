@@ -50,12 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(trigger = %trigger, "Binding shortcut (KDE dialog may appear)...");
 
     let bind_request = global_shortcuts
-        .bind_shortcuts(
-            &session,
-            &[shortcut],
-            None,
-            BindShortcutsOptions::default(),
-        )
+        .bind_shortcuts(&session, &[shortcut], None, BindShortcutsOptions::default())
         .await?;
     let bind_response = bind_request.response()?;
 
@@ -88,7 +83,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         global_shortcuts
             .configure_shortcuts(&session, None, ConfigureShortcutsOptions::default())
             .await?;
-        tracing::warn!("In the dialog: assign a key to 'Flow Linux dictation' (try Meta+Ctrl+Space).");
+        tracing::warn!(
+            "In the dialog: assign a key to 'Flow Linux dictation' (try Meta+Ctrl+Space)."
+        );
         tracing::warn!("Or run: ./scripts/fix-spike-hotkey-binding.sh");
         tracing::warn!("Then press the assigned key while this program is still running.");
     }

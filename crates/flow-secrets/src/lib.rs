@@ -38,10 +38,7 @@ pub fn get_openai_api_key() -> Result<Option<String>, SecretError> {
 }
 
 pub fn has_openai_api_key() -> bool {
-    get_openai_api_key()
-        .ok()
-        .flatten()
-        .is_some()
+    get_openai_api_key().ok().flatten().is_some()
         || std::env::var("OPENAI_API_KEY")
             .map(|value| !value.trim().is_empty())
             .unwrap_or(false)
@@ -60,18 +57,19 @@ pub fn resolve_openai_api_key(env_var: &str) -> Result<String, SecretError> {
     Err(SecretError::MissingApiKey)
 }
 
-/// Ping OpenAI with the given key (lightweight auth check).
-pub fn validate_openai_api_key(key: &str) -> Result<(), String> {
+/// Ping an OpenAI-compatible API with the given key (lightweight auth check).
+pub fn validate_openai_api_key(key: &str, api_base: &str) -> Result<(), String> {
     let key = key.trim();
     if key.is_empty() {
         return Err("API key is empty".to_string());
     }
 
+    let models_url = format!("{}/models", api_base.trim_end_matches('/'));
     let response = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| e.to_string())?
-        .get("https://api.openai.com/v1/models")
+        .get(models_url)
         .bearer_auth(key)
         .send()
         .map_err(|e| format!("network error: {e}"))?;
@@ -86,9 +84,9 @@ pub fn validate_openai_api_key(key: &str) -> Result<(), String> {
 }
 
 /// Validate whichever key is currently configured (typed, stored, or env).
-pub fn validate_configured_openai_api_key(env_var: &str) -> Result<(), String> {
+pub fn validate_configured_openai_api_key(env_var: &str, api_base: &str) -> Result<(), String> {
     if let Ok(key) = resolve_openai_api_key(env_var) {
-        return validate_openai_api_key(&key);
+        return validate_openai_api_key(&key, api_base);
     }
     Err("No API key configured".to_string())
 }

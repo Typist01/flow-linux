@@ -4,6 +4,8 @@ Wispr Flow-like voice dictation for Linux — hold a global hotkey, speak, relea
 
 **Stack:** Rust daemon, KDE Wayland-first, local Whisper or OpenAI cloud STT, optional OpenAI polish, clipboard/ydotool injection.
 
+Flow Linux is the open-source, community/BYOK client. A hosted paid service can be built as a separate product or private fork without putting billing, auth, or cloud backend code in this repository.
+
 ## Features
 
 - Push-to-talk global hotkey (KDE GlobalShortcuts portal)
@@ -60,6 +62,17 @@ openai_model = "gpt-4.1-nano"
 **BYOK — no API keys are included in builds or AppImages.**  
 Configure via tray → **Settings…** → Voice (system keyring) or export `OPENAI_API_KEY`.
 
+Advanced OpenAI-compatible proxy hooks are available for development and future forks:
+
+```toml
+[stt]
+openai_api_base = "https://api.openai.com/v1"
+openai_realtime_url = "wss://api.openai.com/v1/realtime?intent=transcription"
+
+[polish]
+openai_api_base = "https://api.openai.com/v1"
+```
+
 ## Local Whisper model
 
 Required only when `stt.provider = "local"`:
@@ -70,13 +83,26 @@ curl -L -o ~/.cache/flow-linux/models/ggml-base.en.bin \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
 ```
 
-## System requirements (CachyOS/Arch)
+## System requirements
+
+Flow Linux targets **KDE Wayland first**. Other Linux desktops and compositors are experimental because global shortcuts and text injection differ across desktop stacks.
+
+Host services are not bundled in AppImages:
+
+| Role | Arch / CachyOS | Fedora | Debian / Ubuntu |
+|------|----------------|--------|-----------------|
+| Microphone | `pipewire pipewire-pulse` | `pipewire pipewire-pulseaudio` | `pipewire pipewire-pulse` |
+| Clipboard | `wl-clipboard` | `wl-clipboard` | `wl-clipboard` |
+| Injection | `ydotool` | `ydotool` | `ydotool` |
+| Keyring | `libsecret` | `libsecret` | `libsecret-1-0` |
+| UI / tray build deps | `gtk3 libappindicator-gtk3` | `gtk3 libappindicator-gtk3` | `libgtk-3-0 libappindicator3-1` |
+| KDE portal | `xdg-desktop-portal xdg-desktop-portal-kde` | `xdg-desktop-portal xdg-desktop-portal-kde` | `xdg-desktop-portal xdg-desktop-portal-kde` |
+
+On Arch/CachyOS, the helper script installs the development and runtime packages:
 
 ```bash
 ./scripts/install-deps.sh
 ```
-
-Packages: `wtype`, `ydotool`, `wl-clipboard`, `pipewire`, `cmake`, `gtk3`, `libappindicator-gtk3`, `libsecret`
 
 ### ydotool service
 
@@ -125,20 +151,45 @@ export PATH="$HOME/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
 export CARGO_TARGET_DIR="$PWD/target"
 ```
 
-## Distribute (AppImage scaffold)
+## Install from AppImage
+
+Download `Flow_Linux-x86_64.AppImage` from a release, then:
+
+```bash
+chmod +x Flow_Linux-x86_64.AppImage
+./Flow_Linux-x86_64.AppImage --install
+systemctl --user enable --now flow-daemon.service
+```
+
+Then open the tray Settings panel and configure your OpenAI API key or local Whisper model.
+
+The AppImage `--install` step installs:
+
+- KDE portal desktop file for the stable app id
+- user systemd service
+- autostart desktop entry
+
+It does **not** install host packages such as PipeWire, `ydotool`, `wl-clipboard`, `libsecret`, or desktop portals.
+
+## Build a Release AppImage
 
 ```bash
 ./scripts/check-no-secrets.sh
 ./packaging/appimage/build-appimage.sh
 ```
 
-Stages `packaging/appimage/AppDir`. If `linuxdeploy` and `appimagetool` are on `PATH`, also writes  
-`packaging/appimage/out/Flow_Linux-x86_64.AppImage`.
+Stages `packaging/appimage/AppDir`. If `linuxdeploy` and `appimagetool` are on `PATH`, also writes:
 
-**Host packages still required:** PipeWire, `wl-clipboard`, `ydotool` (+ user service), `libsecret`, desktop portal (GlobalShortcuts).
+- `packaging/appimage/out/Flow_Linux-x86_64.AppImage`
+- `packaging/appimage/out/sha256sums.txt`
 
 Font/icon licenses: see [`assets/ATTRIBUTIONS.md`](assets/ATTRIBUTIONS.md).
 
 ## License
 
-MIT OR Apache-2.0 (see individual crate manifests). Fonts under SIL OFL (see attributions).
+Flow Linux source is licensed under either of:
+
+- Apache License, Version 2.0 ([`LICENSE-APACHE`](LICENSE-APACHE))
+- MIT license ([`LICENSE-MIT`](LICENSE-MIT))
+
+Fonts are under SIL OFL (see [`assets/ATTRIBUTIONS.md`](assets/ATTRIBUTIONS.md)).

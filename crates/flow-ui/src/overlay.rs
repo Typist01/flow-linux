@@ -272,11 +272,13 @@ impl eframe::App for UiApp {
         self.drain_commands(ctx);
         self.show_settings_viewport(ctx);
 
-        ctx.request_repaint_after(Duration::from_millis(if self.visible || self.settings_open {
-            33
-        } else {
-            50
-        }));
+        ctx.request_repaint_after(Duration::from_millis(
+            if self.visible || self.settings_open {
+                33
+            } else {
+                50
+            },
+        ));
 
         if !self.visible {
             return;
@@ -326,9 +328,7 @@ impl eframe::App for UiApp {
                                 };
 
                                 if !status.is_empty() {
-                                    ui.label(
-                                        egui::RichText::new(status).size(11.0).color(accent),
-                                    );
+                                    ui.label(egui::RichText::new(status).size(11.0).color(accent));
                                 }
 
                                 let display = if self.processing && self.partial.is_empty() {
@@ -372,7 +372,9 @@ fn draw_mark(ui: &mut egui::Ui, color: egui::Color32) {
     for i in 0..=24 {
         let t = i as f32 / 24.0;
         let x = x0 + (x1 - x0) * t;
-        let wave = ((t * std::f32::consts::PI * 3.0).sin()) * amp * (t * std::f32::consts::PI).sin().abs().max(0.25);
+        let wave = ((t * std::f32::consts::PI * 3.0).sin())
+            * amp
+            * (t * std::f32::consts::PI).sin().abs().max(0.25);
         points.push(egui::pos2(x, y - wave));
     }
     painter.add(egui::Shape::line(points, egui::Stroke::new(2.0_f32, color)));
@@ -430,6 +432,8 @@ fn position_top_center(ctx: &egui::Context) {
         let y = 28.0;
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(x, y)));
     } else {
-        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(200.0, 28.0)));
+        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(
+            200.0, 28.0,
+        )));
     }
 }

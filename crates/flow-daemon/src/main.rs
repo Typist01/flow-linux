@@ -324,7 +324,9 @@ fn validate_startup_config(config: &Config) -> Result<(), Box<dyn std::error::Er
     {
         tracing::error!(path = %config.model_path().display(), "whisper model not found");
         tracing::error!("Download: mkdir -p ~/.cache/flow-linux/models && curl -L -o ~/.cache/flow-linux/models/ggml-base.en.bin \\");
-        tracing::error!("  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin");
+        tracing::error!(
+            "  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"
+        );
         std::process::exit(1);
     }
     Ok(())

@@ -4,13 +4,12 @@ use flow_secrets::resolve_openai_api_key;
 use reqwest::multipart;
 use serde::Deserialize;
 
-const OPENAI_TRANSCRIPTIONS_URL: &str = "https://api.openai.com/v1/audio/transcriptions";
-
 pub struct OpenAiSttEngine {
     client: reqwest::Client,
     model: String,
     language: String,
     api_key_env: String,
+    transcriptions_url: String,
 }
 
 impl OpenAiSttEngine {
@@ -23,6 +22,10 @@ impl OpenAiSttEngine {
             model: config.stt.openai_model.clone(),
             language: config.stt.language.clone(),
             api_key_env: config.stt.openai_api_key_env.clone(),
+            transcriptions_url: openai_endpoint(
+                &config.stt.openai_api_base,
+                "audio/transcriptions",
+            ),
         })
     }
 }
@@ -40,7 +43,8 @@ impl SttEngine for OpenAiSttEngine {
 
     async fn transcribe(&self, samples: &[f32]) -> Result<String, SttError> {
         let start = std::time::Instant::now();
-        let api_key = resolve_openai_api_key(&self.api_key_env).map_err(|e| SttError::Cloud(e.to_string()))?;
+        let api_key = resolve_openai_api_key(&self.api_key_env)
+            .map_err(|e| SttError::Cloud(e.to_string()))?;
         let wav = samples_to_wav(samples, SAMPLE_RATE);
 
         let file_part = multipart::Part::bytes(wav)
@@ -56,7 +60,7 @@ impl SttEngine for OpenAiSttEngine {
 
         let response = self
             .client
-            .post(OPENAI_TRANSCRIPTIONS_URL)
+            .post(&self.transcriptions_url)
             .bearer_auth(api_key)
             .multipart(form)
             .send()
@@ -84,4 +88,12 @@ impl SttEngine for OpenAiSttEngine {
         );
         Ok(transcript)
     }
+}
+
+fn openai_endpoint(base: &str, path: &str) -> String {
+    format!(
+        "{}/{}",
+        base.trim_end_matches('/'),
+        path.trim_start_matches('/')
+    )
 }

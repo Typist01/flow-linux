@@ -1,10 +1,7 @@
 pub const LOCAL_WHISPER_MODELS: &[&str] = &["tiny.en", "base.en", "small.en", "medium.en"];
 
-pub const OPENAI_STT_MODELS: &[&str] = &[
-    "gpt-4o-mini-transcribe",
-    "gpt-4o-transcribe",
-    "whisper-1",
-];
+pub const OPENAI_STT_MODELS: &[&str] =
+    &["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "whisper-1"];
 
 pub const OPENAI_STREAMING_STT_MODELS: &[&str] = &["gpt-realtime-whisper"];
 

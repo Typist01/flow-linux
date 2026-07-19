@@ -137,8 +137,8 @@ fn build_tray(enabled: &Arc<AtomicBool>) -> Result<TrayIcon, String> {
     let settings = MenuItem::with_id(SETTINGS_MENU_ID, "Settings…", true, None);
     let quit = MenuItem::with_id(QUIT_MENU_ID, "Quit", true, None);
     let separator = PredefinedMenuItem::separator();
-    let menu = Menu::with_items(&[&toggle, &settings, &separator, &quit])
-        .map_err(|e| e.to_string())?;
+    let menu =
+        Menu::with_items(&[&toggle, &settings, &separator, &quit]).map_err(|e| e.to_string())?;
 
     TrayIconBuilder::new()
         .with_menu(Box::new(menu))

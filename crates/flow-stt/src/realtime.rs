@@ -13,8 +13,6 @@ use tokio_tungstenite::{
     tungstenite::{client::IntoClientRequest, http::HeaderValue, Message},
 };
 
-const REALTIME_URL: &str = "wss://api.openai.com/v1/realtime?intent=transcription";
-
 #[derive(Debug, Clone)]
 pub enum StreamingEvent {
     Delta(String),
@@ -47,7 +45,10 @@ impl RealtimeTranscriptionSession {
         let api_key = resolve_openai_api_key(&config.stt.openai_api_key_env)
             .map_err(|e| RealtimeError::Cloud(e.to_string()))?;
 
-        let mut request = REALTIME_URL
+        let mut request = config
+            .stt
+            .openai_realtime_url
+            .as_str()
             .into_client_request()
             .map_err(|e| RealtimeError::Websocket(e.to_string()))?;
         let headers = request.headers_mut();
@@ -244,14 +245,12 @@ fn handle_server_event(text: &str, event_tx: &mpsc::UnboundedSender<StreamingEve
         "session.created" | "session.updated" => {
             let _ = event_tx.send(StreamingEvent::SessionReady);
         }
-        "conversation.item.input_audio_transcription.delta"
-        | "transcript.text.delta" => {
+        "conversation.item.input_audio_transcription.delta" | "transcript.text.delta" => {
             if let Some(delta) = extract_delta(&value) {
                 let _ = event_tx.send(StreamingEvent::Delta(delta));
             }
         }
-        "conversation.item.input_audio_transcription.completed"
-        | "transcript.text.done" => {
+        "conversation.item.input_audio_transcription.completed" | "transcript.text.done" => {
             if let Some(transcript) = extract_completed(&value) {
                 let _ = event_tx.send(StreamingEvent::Completed(transcript));
             }

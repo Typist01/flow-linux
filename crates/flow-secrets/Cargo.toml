@@ -2,6 +2,7 @@
 name = "flow-secrets"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 
 [dependencies]
 keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }

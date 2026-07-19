@@ -52,12 +52,7 @@ pub async fn start(config: &Config) -> Result<mpsc::UnboundedReceiver<HotkeyEven
         .preferred_trigger(Some(config.hotkey_trigger()));
 
     let bind_request = global_shortcuts
-        .bind_shortcuts(
-            &session,
-            &[shortcut],
-            None,
-            BindShortcutsOptions::default(),
-        )
+        .bind_shortcuts(&session, &[shortcut], None, BindShortcutsOptions::default())
         .await?;
     bind_request.response()?;
 

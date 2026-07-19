@@ -11,9 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().without_time().init();
 
     let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .ok_or("No input device found")?;
+    let device = host.default_input_device().ok_or("No input device found")?;
     tracing::info!(device = %device.name()?, "Using input device");
 
     let config = cpal::StreamConfig {
@@ -53,7 +51,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     tracing::warn!("No samples captured");
                     continue;
                 }
-                let rms = (samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32).sqrt();
+                let rms =
+                    (samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32).sqrt();
                 tracing::info!(samples = samples.len(), rms, "Captured");
                 if rms < SILENCE_RMS_THRESHOLD {
                     tracing::warn!("Silence guard triggered — no speech detected");

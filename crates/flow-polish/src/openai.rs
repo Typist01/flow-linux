@@ -3,8 +3,6 @@ use flow_config::{Config, PolishProvider};
 use flow_secrets::resolve_openai_api_key;
 use serde::{Deserialize, Serialize};
 
-const OPENAI_CHAT_URL: &str = "https://api.openai.com/v1/chat/completions";
-
 const SYSTEM_PROMPT: &str = "\
 You are a dictation editor. Fix capitalization and punctuation. \
 Remove filler words (um, uh, like, you know). Do not change meaning. \
@@ -14,6 +12,7 @@ pub struct OpenAiPolishEngine {
     client: reqwest::Client,
     model: String,
     api_key_env: String,
+    chat_url: String,
 }
 
 impl OpenAiPolishEngine {
@@ -25,6 +24,7 @@ impl OpenAiPolishEngine {
                 .map_err(|e| PolishError::Request(e.to_string()))?,
             model: config.polish.openai_model.clone(),
             api_key_env: config.polish.openai_api_key_env.clone(),
+            chat_url: openai_endpoint(&config.polish.openai_api_base, "chat/completions"),
         })
     }
 }
@@ -68,8 +68,8 @@ impl PolishEngine for OpenAiPolishEngine {
             return Ok(text.to_string());
         }
 
-        let api_key =
-            resolve_openai_api_key(&self.api_key_env).map_err(|e| PolishError::Request(e.to_string()))?;
+        let api_key = resolve_openai_api_key(&self.api_key_env)
+            .map_err(|e| PolishError::Request(e.to_string()))?;
 
         let request = ChatRequest {
             model: &self.model,
@@ -88,7 +88,7 @@ impl PolishEngine for OpenAiPolishEngine {
 
         let response = self
             .client
-            .post(OPENAI_CHAT_URL)
+            .post(&self.chat_url)
             .bearer_auth(api_key)
             .json(&request)
             .send()
@@ -98,7 +98,9 @@ impl PolishEngine for OpenAiPolishEngine {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(PolishError::Request(format!("OpenAI polish {status}: {body}")));
+            return Err(PolishError::Request(format!(
+                "OpenAI polish {status}: {body}"
+            )));
         }
 
         let payload: ChatResponse = response
@@ -112,9 +114,19 @@ impl PolishEngine for OpenAiPolishEngine {
             .next()
             .map(|choice| choice.message.content.trim().to_string())
             .filter(|text| !text.is_empty())
-            .ok_or_else(|| PolishError::Request("OpenAI returned empty polish response".to_string()))?;
+            .ok_or_else(|| {
+                PolishError::Request("OpenAI returned empty polish response".to_string())
+            })?;
 
         tracing::info!(chars = polished.len(), model = %self.model, "polish complete");
         Ok(polished)
     }
+}
+
+fn openai_endpoint(base: &str, path: &str) -> String {
+    format!(
+        "{}/{}",
+        base.trim_end_matches('/'),
+        path.trim_start_matches('/')
+    )
 }

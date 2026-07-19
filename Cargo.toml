@@ -16,3 +16,6 @@ members = [
     "spikes/stt",
     "spikes/realtime",
 ]
+
+[workspace.package]
+license = "MIT OR Apache-2.0"

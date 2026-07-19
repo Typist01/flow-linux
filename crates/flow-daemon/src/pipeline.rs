@@ -22,10 +22,7 @@ pub async fn run_dictation_pipeline(
     finish_transcript(engines, raw).await
 }
 
-pub async fn finish_transcript(
-    engines: &EngineSet,
-    raw: String,
-) -> Result<String, PipelineError> {
+pub async fn finish_transcript(engines: &EngineSet, raw: String) -> Result<String, PipelineError> {
     if raw.is_empty() {
         return Ok(String::new());
     }
@@ -35,7 +32,10 @@ pub async fn finish_transcript(
     let final_text = match engines.polish.polish(&raw).await {
         Ok(text) => text,
         Err(flow_polish::PolishError::NotImplemented(provider)) => {
-            tracing::warn!(?provider, "polish provider not implemented — using raw transcript");
+            tracing::warn!(
+                ?provider,
+                "polish provider not implemented — using raw transcript"
+            );
             raw.clone()
         }
         Err(e) => {
