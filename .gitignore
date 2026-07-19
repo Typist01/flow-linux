@@ -28,3 +28,4 @@ packaging/appimage/AppDir/usr/bin/
 packaging/appimage/AppDir/AppRun
 packaging/appimage/AppDir/.DirIcon
 packaging/appimage/AppDir/flow-linux.desktop
+packaging/appimage/AppDir/flow-linux.png
