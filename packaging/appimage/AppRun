@@ -30,16 +30,24 @@ EOF
 install_desktop_file() {
   local source="$1"
   local dest="$2"
-  local exec_path="$3"
+  local exec_cmd="$3"
 
   mkdir -p "$(dirname "$dest")"
-  sed -E "s|^Exec=.*|Exec=$exec_path|" "$source" > "$dest"
+  sed -E "s|^Exec=.*|Exec=$exec_cmd|" "$source" > "$dest"
 }
 
 install_user_files() {
   local exec_path="$SELF"
   if [[ "$exec_path" == "$APPDIR/AppRun" && -x "$BINARY" ]]; then
     exec_path="$BINARY"
+  fi
+
+  # AppImages need extract-and-run when FUSE is unavailable (common on some hosts).
+  local exec_cmd="$exec_path"
+  local systemd_env=$'Environment=RUST_LOG=info\n'
+  if [[ "$exec_path" == *.AppImage ]]; then
+    exec_cmd="env APPIMAGE_EXTRACT_AND_RUN=1 $exec_path"
+    systemd_env=$'Environment=RUST_LOG=info\nEnvironment=APPIMAGE_EXTRACT_AND_RUN=1\n'
   fi
 
   local app_dir="$HOME/.local/share/applications"
@@ -51,10 +59,11 @@ install_user_files() {
 
   mkdir -p "$app_dir" "$systemd_dir" "$autostart_dir"
 
-  install_desktop_file "$APPDIR/usr/share/applications/flow-linux.desktop" "$portal_desktop" "$exec_path"
-  install_desktop_file "$APPDIR/usr/share/applications/flow-linux.desktop" "$autostart_file" "$exec_path"
+  install_desktop_file "$APPDIR/usr/share/applications/flow-linux.desktop" "$portal_desktop" "$exec_cmd"
+  install_desktop_file "$APPDIR/usr/share/applications/flow-linux.desktop" "$autostart_file" "$exec_cmd"
 
-  cat > "$service_file" <<EOF
+  {
+    cat <<EOF
 [Unit]
 Description=Flow Linux dictation daemon
 After=graphical-session.target pipewire.service
@@ -65,11 +74,14 @@ Type=simple
 ExecStart=$exec_path
 Restart=on-failure
 RestartSec=3
-Environment=RUST_LOG=info
+EOF
+    printf '%s' "$systemd_env"
+    cat <<'EOF'
 
 [Install]
 WantedBy=graphical-session.target
 EOF
+  } > "$service_file"
 
   if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database "$app_dir" 2>/dev/null || true
