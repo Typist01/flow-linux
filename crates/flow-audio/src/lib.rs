@@ -1,4 +1,5 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::{FromSample, Sample, SampleFormat, SizedSample};
 use flow_config::{SAMPLE_RATE, SILENCE_RMS_THRESHOLD};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -14,13 +15,21 @@ pub enum AudioError {
     Play(#[from] cpal::PlayStreamError),
     #[error("device name: {0}")]
     DeviceName(#[from] cpal::DeviceNameError),
+    #[error("default input config: {0}")]
+    DefaultConfig(#[from] cpal::DefaultStreamConfigError),
+    #[error("unsupported sample format: {0:?}")]
+    UnsupportedFormat(SampleFormat),
 }
 
 pub struct AudioCapture {
     _stream: cpal::Stream,
+    /// Mono PCM at the device's native sample rate.
     buffer: Arc<Mutex<Vec<f32>>>,
     recording: Arc<AtomicBool>,
     device_name: String,
+    /// Native capture rate (before resample).
+    device_sample_rate: u32,
+    /// Rate exposed to STT / callers after resampling.
     sample_rate: u32,
 }
 
@@ -29,42 +38,99 @@ impl AudioCapture {
         Self::with_sample_rate(SAMPLE_RATE)
     }
 
-    pub fn with_sample_rate(sample_rate: u32) -> Result<Self, AudioError> {
+    pub fn with_sample_rate(target_sample_rate: u32) -> Result<Self, AudioError> {
         let host = cpal::default_host();
         let device = host.default_input_device().ok_or(AudioError::NoDevice)?;
         let device_name = device.name()?;
 
-        let config = cpal::StreamConfig {
-            channels: 1,
-            sample_rate: cpal::SampleRate(sample_rate),
-            buffer_size: cpal::BufferSize::Default,
-        };
+        // Use the device default config (often stereo @ 44.1/48k on PipeWire).
+        // Opening a hard-coded mono 16k stream frequently yields silence on pro/USB interfaces.
+        let supported = device.default_input_config()?;
+        let channels = supported.channels() as usize;
+        let device_sample_rate = supported.sample_rate().0;
+        let sample_format = supported.sample_format();
+        let stream_config: cpal::StreamConfig = supported.clone().into();
 
         let buffer = Arc::new(Mutex::new(Vec::new()));
         let recording = Arc::new(AtomicBool::new(false));
-        let buffer_clone = Arc::clone(&buffer);
-        let recording_clone = Arc::clone(&recording);
 
-        let stream = device.build_input_stream(
-            &config,
-            move |data: &[f32], _| {
-                if recording_clone.load(Ordering::Relaxed) {
-                    buffer_clone.lock().unwrap().extend_from_slice(data);
-                }
-            },
-            |err| tracing::error!(error = %err, "audio stream error"),
-            None,
-        )?;
+        let stream = match sample_format {
+            SampleFormat::F32 => build_stream::<f32>(
+                &device,
+                &stream_config,
+                channels,
+                Arc::clone(&buffer),
+                Arc::clone(&recording),
+            )?,
+            SampleFormat::I16 => build_stream::<i16>(
+                &device,
+                &stream_config,
+                channels,
+                Arc::clone(&buffer),
+                Arc::clone(&recording),
+            )?,
+            SampleFormat::U16 => build_stream::<u16>(
+                &device,
+                &stream_config,
+                channels,
+                Arc::clone(&buffer),
+                Arc::clone(&recording),
+            )?,
+            SampleFormat::I8 => build_stream::<i8>(
+                &device,
+                &stream_config,
+                channels,
+                Arc::clone(&buffer),
+                Arc::clone(&recording),
+            )?,
+            SampleFormat::U8 => build_stream::<u8>(
+                &device,
+                &stream_config,
+                channels,
+                Arc::clone(&buffer),
+                Arc::clone(&recording),
+            )?,
+            SampleFormat::I32 => build_stream::<i32>(
+                &device,
+                &stream_config,
+                channels,
+                Arc::clone(&buffer),
+                Arc::clone(&recording),
+            )?,
+            SampleFormat::U32 => build_stream::<u32>(
+                &device,
+                &stream_config,
+                channels,
+                Arc::clone(&buffer),
+                Arc::clone(&recording),
+            )?,
+            SampleFormat::F64 => build_stream::<f64>(
+                &device,
+                &stream_config,
+                channels,
+                Arc::clone(&buffer),
+                Arc::clone(&recording),
+            )?,
+            other => return Err(AudioError::UnsupportedFormat(other)),
+        };
         stream.play()?;
 
-        tracing::info!(device = %device_name, sample_rate, "audio capture ready");
+        tracing::info!(
+            device = %device_name,
+            channels,
+            device_sample_rate,
+            target_sample_rate,
+            ?sample_format,
+            "audio capture ready"
+        );
 
         Ok(Self {
             _stream: stream,
             buffer,
             recording,
             device_name,
-            sample_rate,
+            device_sample_rate,
+            sample_rate: target_sample_rate,
         })
     }
 
@@ -82,10 +148,13 @@ impl AudioCapture {
         tracing::debug!("recording started");
     }
 
-    /// Drain samples captured since the last call (for streaming upload).
+    /// Drain samples captured since the last call, resampled to the target rate.
     pub fn take_pending_samples(&self) -> Vec<f32> {
-        let mut buffer = self.buffer.lock().unwrap();
-        std::mem::take(&mut *buffer)
+        let native = {
+            let mut buffer = self.buffer.lock().unwrap();
+            std::mem::take(&mut *buffer)
+        };
+        resample_linear(&native, self.device_sample_rate, self.sample_rate)
     }
 
     /// RMS of the most recent samples without draining (for overlay waveform in batch mode).
@@ -99,7 +168,7 @@ impl AudioCapture {
         (slice.iter().map(|s| s * s).sum::<f32>() / slice.len() as f32).sqrt()
     }
 
-    /// Stop recording and return all remaining samples (no silence filter).
+    /// Stop recording and return all remaining samples (no silence filter), at target rate.
     pub fn stop_recording_raw(&self) -> Vec<f32> {
         self.recording.store(false, Ordering::Relaxed);
         self.take_pending_samples()
@@ -109,15 +178,15 @@ impl AudioCapture {
     pub fn stop_recording(&self) -> Option<Vec<f32>> {
         let samples = self.stop_recording_raw();
         if samples.is_empty() {
-            tracing::debug!("no samples captured");
+            tracing::warn!("no samples captured");
             return None;
         }
 
         let rms = (samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32).sqrt();
-        tracing::debug!(samples = samples.len(), rms, "recording stopped");
+        tracing::info!(samples = samples.len(), rms, "recording stopped");
 
         if rms < SILENCE_RMS_THRESHOLD {
-            tracing::debug!("silence guard — skipping transcription");
+            tracing::warn!(rms, "silence guard — skipping transcription");
             return None;
         }
 
@@ -127,6 +196,56 @@ impl AudioCapture {
     pub fn cancel_recording(&self) {
         self.recording.store(false, Ordering::Relaxed);
         self.buffer.lock().unwrap().clear();
+    }
+}
+
+fn build_stream<T>(
+    device: &cpal::Device,
+    config: &cpal::StreamConfig,
+    channels: usize,
+    buffer: Arc<Mutex<Vec<f32>>>,
+    recording: Arc<AtomicBool>,
+) -> Result<cpal::Stream, AudioError>
+where
+    T: SizedSample,
+    f32: FromSample<T>,
+{
+    let err_fn = |err| tracing::error!(error = %err, "audio stream error");
+    let stream = device.build_input_stream(
+        config,
+        move |data: &[T], _| {
+            if !recording.load(Ordering::Relaxed) {
+                return;
+            }
+            let mut out = buffer.lock().unwrap();
+            push_downmixed(data, channels, &mut out);
+        },
+        err_fn,
+        None,
+    )?;
+    Ok(stream)
+}
+
+fn push_downmixed<T>(data: &[T], channels: usize, out: &mut Vec<f32>)
+where
+    T: Sample,
+    f32: FromSample<T>,
+{
+    if channels <= 1 {
+        out.reserve(data.len());
+        for &sample in data {
+            out.push(sample.to_sample::<f32>());
+        }
+        return;
+    }
+
+    out.reserve(data.len() / channels);
+    for frame in data.chunks_exact(channels) {
+        let mut sum = 0.0f32;
+        for &sample in frame {
+            sum += sample.to_sample::<f32>();
+        }
+        out.push(sum / channels as f32);
     }
 }
 
@@ -183,5 +302,15 @@ mod tests {
         let bytes = samples_to_pcm16_bytes(&[1.0, -1.0]);
         // 1.0 → i16::MAX (0x7FFF); -1.0 → -32767 (0x8001) due to cast from f32
         assert_eq!(bytes, [0xff, 0x7f, 0x01, 0x80]);
+    }
+
+    #[test]
+    fn downmix_stereo_averages_channels() {
+        let data = [0.0f32, 1.0, 0.5, 0.5];
+        let mut out = Vec::new();
+        push_downmixed(&data, 2, &mut out);
+        assert_eq!(out.len(), 2);
+        assert!((out[0] - 0.5).abs() < f32::EPSILON);
+        assert!((out[1] - 0.5).abs() < f32::EPSILON);
     }
 }

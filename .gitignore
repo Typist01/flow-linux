@@ -25,6 +25,7 @@ secrets/
 # AppImage build output
 packaging/appimage/out/
 packaging/appimage/AppDir/usr/bin/
+packaging/appimage/AppDir/usr/lib/
 packaging/appimage/AppDir/AppRun
 packaging/appimage/AppDir/.DirIcon
 packaging/appimage/AppDir/flow-linux.desktop

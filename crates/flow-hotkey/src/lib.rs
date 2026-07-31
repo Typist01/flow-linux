@@ -1,5 +1,6 @@
 use ashpd::desktop::global_shortcuts::{
-    BindShortcutsOptions, GlobalShortcuts, ListShortcutsOptions, NewShortcut,
+    BindShortcutsOptions, ConfigureShortcutsOptions, GlobalShortcuts, ListShortcutsOptions,
+    NewShortcut,
 };
 use ashpd::desktop::CreateSessionOptions;
 use ashpd::AppID;
@@ -21,8 +22,13 @@ pub enum HotkeyError {
     Portal(#[from] ashpd::Error),
     #[error("invalid app id")]
     InvalidAppId,
-    #[error("shortcut not bound — assign a key in KDE Settings or run scripts/fix-spike-hotkey-binding.sh")]
-    ShortcutUnbound,
+}
+
+/// Hotkey event stream plus startup binding status.
+pub struct HotkeyListener {
+    pub events: mpsc::UnboundedReceiver<HotkeyEvent>,
+    /// True when the portal had no key assigned at startup (configure dialog was opened).
+    pub awaiting_binding: bool,
 }
 
 fn is_unbound(trigger: &str) -> bool {
@@ -31,7 +37,10 @@ fn is_unbound(trigger: &str) -> bool {
 }
 
 /// Start global hotkey listener. Returns a channel of press/release events.
-pub async fn start(config: &Config) -> Result<mpsc::UnboundedReceiver<HotkeyEvent>, HotkeyError> {
+///
+/// If the shortcut is unbound, opens the desktop shortcut configuration dialog and
+/// continues listening so a late binding works without restarting.
+pub async fn start(config: &Config) -> Result<HotkeyListener, HotkeyError> {
     let app_id = AppID::from_str(config.app_id()).map_err(|_| HotkeyError::InvalidAppId)?;
     if let Err(e) = ashpd::register_host_app(app_id).await {
         tracing::error!(error = %e, "portal registration failed");
@@ -48,8 +57,9 @@ pub async fn start(config: &Config) -> Result<mpsc::UnboundedReceiver<HotkeyEven
         .create_session(CreateSessionOptions::default())
         .await?;
 
+    let preferred = config.hotkey_trigger();
     let shortcut = NewShortcut::new(config.shortcut_id(), "Flow Linux dictation")
-        .preferred_trigger(Some(config.hotkey_trigger()));
+        .preferred_trigger(Some(preferred));
 
     let bind_request = global_shortcuts
         .bind_shortcuts(&session, &[shortcut], None, BindShortcutsOptions::default())
@@ -70,19 +80,39 @@ pub async fn start(config: &Config) -> Result<mpsc::UnboundedReceiver<HotkeyEven
         }
     }
 
-    if bound_trigger.is_none() {
-        return Err(HotkeyError::ShortcutUnbound);
+    let awaiting_binding = bound_trigger.is_none();
+    if awaiting_binding {
+        tracing::warn!(
+            preferred,
+            "shortcut not bound — opening desktop shortcut configuration"
+        );
+        // Open the dialog; do not wait for the user to finish (same as the hotkey spike).
+        if let Err(e) = global_shortcuts
+            .configure_shortcuts(&session, None, ConfigureShortcutsOptions::default())
+            .await
+        {
+            tracing::warn!(
+                error = %e,
+                "failed to open shortcut configuration — assign a key in system settings"
+            );
+        } else {
+            tracing::warn!(
+                preferred,
+                "assign a key to 'Flow Linux dictation' (try {preferred}), then hold it to dictate"
+            );
+        }
+    } else {
+        tracing::info!(
+            trigger = bound_trigger.as_deref().unwrap_or("unknown"),
+            "hotkey listener ready — hold to record, release to transcribe"
+        );
     }
-
-    tracing::info!(
-        trigger = bound_trigger.as_deref().unwrap_or("unknown"),
-        "hotkey listener ready — hold to record, release to transcribe"
-    );
 
     let (tx, rx) = mpsc::unbounded_channel();
 
     let mut activated = global_shortcuts.receive_activated().await?;
     let mut deactivated = global_shortcuts.receive_deactivated().await?;
+    let mut changed = global_shortcuts.receive_shortcuts_changed().await?;
 
     tokio::spawn(async move {
         loop {
@@ -93,10 +123,16 @@ pub async fn start(config: &Config) -> Result<mpsc::UnboundedReceiver<HotkeyEven
                 Some(_event) = deactivated.next() => {
                     let _ = tx.send(HotkeyEvent::Released);
                 }
+                Some(event) = changed.next() => {
+                    tracing::info!(?event, "shortcuts changed — new binding is active");
+                }
                 else => break,
             }
         }
     });
 
-    Ok(rx)
+    Ok(HotkeyListener {
+        events: rx,
+        awaiting_binding,
+    })
 }
