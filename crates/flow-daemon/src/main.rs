@@ -16,7 +16,7 @@ use state::DictationPhase;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, RwLock};
 
 struct StreamingSession {
     session: RealtimeTranscriptionSession,
@@ -37,7 +37,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut audio = AudioCapture::with_sample_rate(capture_sample_rate(&config))?;
     let engines = Arc::new(RwLock::new(build_engines(&config)?));
-    let mut hotkey_rx = start_hotkey(engines.read().await.config.as_ref()).await?;
+    let mut hotkey_ok = true;
+    let mut hotkey_rx = match start_hotkey(engines.read().await.config.as_ref()).await {
+        Ok(listener) => {
+            if listener.awaiting_binding {
+                hotkey_ok = false;
+                notify_error(
+                    "Assign a hotkey in the shortcut dialog to enable dictation. Settings still work.",
+                );
+            }
+            listener.events
+        }
+        Err(e) => {
+            hotkey_ok = false;
+            tracing::error!(error = %e, "hotkey listener unavailable — continuing without dictation");
+            notify_error(format!(
+                "Hotkey unavailable: {e}. Open Settings from the tray; dictation needs a bound shortcut."
+            ));
+            let (_tx, rx) = mpsc::unbounded_channel::<HotkeyEvent>();
+            rx
+        }
+    };
 
     let mut phase = DictationPhase::Idle;
     let mut streaming: Option<StreamingSession> = None;
@@ -50,8 +70,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         show_overlay = config.general.show_overlay,
         "Flow Linux daemon starting"
     );
-    tracing::info!("Ready — hold hotkey to dictate, release to insert text");
-    tray.set_state(TrayState::Idle);
+    if hotkey_ok {
+        tracing::info!("Ready — hold hotkey to dictate, release to insert text");
+        tray.set_state(TrayState::Idle);
+    } else {
+        tracing::warn!("Ready with limited hotkey — Settings and tray remain available");
+        tray.set_state(TrayState::Error);
+    }
 
     loop {
         tokio::select! {
