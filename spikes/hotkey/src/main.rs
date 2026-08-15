@@ -9,7 +9,7 @@ use ashpd::AppID;
 use futures::StreamExt;
 use std::str::FromStr;
 
-const APP_ID: &str = "io.flowlinux.SpikeHotkey";
+const APP_ID: &str = "io.github.Typist01.FlowLinux";
 const SHORTCUT_ID: &str = "flow-dictation";
 /// KDE/Qt format — Meta = Windows/Super key. Override with FLOW_SPIKE_HOTKEY env var.
 const DEFAULT_TRIGGER: &str = "Meta+Ctrl+Space";
@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_id = AppID::from_str(APP_ID)?;
     if let Err(e) = ashpd::register_host_app(app_id).await {
         tracing::error!(error = %e, "Portal app registration failed");
-        tracing::error!("Run: ./scripts/install-spike-hotkey-desktop.sh");
+        tracing::error!("Run: ./scripts/install-hotkey-desktop.sh");
         return Err(e.into());
     }
     tracing::info!(app_id = APP_ID, "Registered host app with portal");
@@ -86,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!(
             "In the dialog: assign a key to 'Flow Linux dictation' (try Meta+Ctrl+Space)."
         );
-        tracing::warn!("Or run: ./scripts/fix-spike-hotkey-binding.sh");
+        tracing::warn!("Or run: ./scripts/fix-hotkey-binding.sh");
         tracing::warn!("Then press the assigned key while this program is still running.");
     }
 

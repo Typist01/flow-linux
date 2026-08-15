@@ -1,3 +1,4 @@
+mod download;
 mod openai;
 mod realtime;
 mod wav;
@@ -45,4 +46,5 @@ pub fn ensure_local_model_exists(config: &Config) -> bool {
     WhisperEngine::ensure_model_exists(&config.model_path())
 }
 
+pub use download::{download_local_model, model_download_url};
 pub use wav::samples_to_wav;

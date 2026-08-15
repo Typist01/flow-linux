@@ -44,7 +44,7 @@ pub async fn start(config: &Config) -> Result<HotkeyListener, HotkeyError> {
     let app_id = AppID::from_str(config.app_id()).map_err(|_| HotkeyError::InvalidAppId)?;
     if let Err(e) = ashpd::register_host_app(app_id).await {
         tracing::error!(error = %e, "portal registration failed");
-        tracing::error!("Run: ./scripts/install-spike-hotkey-desktop.sh");
+        tracing::error!("Run: ./scripts/install-hotkey-desktop.sh");
         tracing::error!(
             "Desktop file must exist at ~/.local/share/applications/{}.desktop",
             config.desktop_file_name()

@@ -6,6 +6,7 @@ mod state;
 use app::{acquire_single_instance, init_logging};
 use engines::{build_engines, EngineError, EngineSet};
 use flow_audio::AudioCapture;
+use flow_config::runtime_status::RuntimeStatus;
 use flow_config::{Config, SttMode, SttProvider, SAMPLE_RATE, STREAMING_SAMPLE_RATE};
 use flow_hotkey::{start as start_hotkey, HotkeyEvent};
 use flow_settings::open_settings_window;
@@ -38,8 +39,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut audio = AudioCapture::with_sample_rate(capture_sample_rate(&config))?;
     let engines = Arc::new(RwLock::new(build_engines(&config)?));
     let mut hotkey_ok = true;
+    let mut hotkey_bound = false;
     let mut hotkey_rx = match start_hotkey(engines.read().await.config.as_ref()).await {
         Ok(listener) => {
+            hotkey_bound = !listener.awaiting_binding;
             if listener.awaiting_binding {
                 hotkey_ok = false;
                 notify_error(
@@ -58,6 +61,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             rx
         }
     };
+    if let Err(e) = RuntimeStatus::now(
+        Some(audio.device_name().to_string()),
+        hotkey_bound,
+        config.hotkey.hotkey_trigger.clone(),
+    )
+    .write()
+    {
+        tracing::warn!(error = %e, "could not write runtime status for Settings");
+    }
 
     let mut phase = DictationPhase::Idle;
     let mut streaming: Option<StreamingSession> = None;
@@ -272,6 +284,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             match AudioCapture::with_sample_rate(capture_sample_rate(&config)) {
                                 Ok(rebuilt) => {
                                     audio = rebuilt;
+                                    if let Err(e) = RuntimeStatus::now(
+                                        Some(audio.device_name().to_string()),
+                                        hotkey_bound,
+                                        config.hotkey.hotkey_trigger.clone(),
+                                    )
+                                    .write()
+                                    {
+                                        tracing::warn!(error = %e, "could not refresh runtime status");
+                                    }
                                     tracing::info!(
                                         sample_rate = audio.sample_rate(),
                                         show_overlay = config.general.show_overlay,
@@ -348,7 +369,7 @@ fn validate_startup_config(config: &Config) -> Result<(), Box<dyn std::error::Er
         && !flow_stt::ensure_local_model_exists(config)
     {
         tracing::error!(path = %config.model_path().display(), "whisper model not found");
-        tracing::error!("Download: mkdir -p ~/.cache/flow-linux/models && curl -L -o ~/.cache/flow-linux/models/ggml-base.en.bin \\");
+        tracing::error!("Download the model from Settings → Ready, or: mkdir -p ~/.cache/flow-linux/models && curl -L -o ~/.cache/flow-linux/models/ggml-base.en.bin \\");
         tracing::error!(
             "  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"
         );

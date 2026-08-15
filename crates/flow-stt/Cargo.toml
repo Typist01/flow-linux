@@ -1,6 +1,6 @@
 [package]
 name = "flow-stt"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license.workspace = true
 
@@ -11,7 +11,8 @@ flow-audio = { path = "../flow-audio" }
 flow-config = { path = "../flow-config" }
 flow-secrets = { path = "../flow-secrets" }
 futures-util = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
+sha2 = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

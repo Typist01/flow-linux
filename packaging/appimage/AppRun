@@ -4,7 +4,7 @@ set -euo pipefail
 APPDIR="${APPDIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 SELF="${APPIMAGE:-$APPDIR/AppRun}"
 BINARY="$APPDIR/usr/bin/flow-daemon"
-APP_ID="io.flowlinux.SpikeHotkey"
+APP_ID="io.github.Typist01.FlowLinux"
 
 show_help() {
   cat <<'EOF'

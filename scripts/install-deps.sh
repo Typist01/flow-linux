@@ -4,7 +4,7 @@
 # =============================================================================
 #
 # Run this ONCE before Spike 1. It installs the tools that type/paste text
-# into whatever app you have focused (the hardest part of a Wispr-like app).
+# into whatever app you have focused (the hardest part of a dictation app).
 #
 # Usage:
 #   ./scripts/install-deps.sh

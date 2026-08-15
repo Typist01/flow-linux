@@ -1,4 +1,6 @@
 pub mod catalogs;
+pub mod health;
+pub mod runtime_status;
 
 use catalogs::{
     LOCAL_WHISPER_MODELS, OPENAI_POLISH_MODELS, OPENAI_STREAMING_STT_MODELS, OPENAI_STT_MODELS,
@@ -8,8 +10,10 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Application ID for KDE portal / global shortcuts.
-pub const APP_ID: &str = "io.flowlinux.SpikeHotkey";
+/// Application ID for KDE portal / global shortcuts / Flathub.
+pub const APP_ID: &str = "io.github.Typist01.FlowLinux";
+/// Previous portal id — migrated on config load so existing installs keep working.
+pub const LEGACY_APP_ID: &str = "io.flowlinux.SpikeHotkey";
 pub const SHORTCUT_ID: &str = "flow-dictation";
 pub const DEFAULT_HOTKEY: &str = "Meta+Ctrl+Space";
 
@@ -272,7 +276,12 @@ impl Config {
     pub fn load() -> Self {
         let path = Self::config_path();
         match Self::load_from(&path) {
-            Ok(config) => {
+            Ok(mut config) => {
+                if config.migrate_legacy_ids() {
+                    if let Err(write_err) = config.save() {
+                        tracing::warn!(error = %write_err, "could not persist app id migration");
+                    }
+                }
                 tracing::info!(path = %path.display(), "loaded config");
                 config
             }
@@ -294,6 +303,7 @@ impl Config {
         })?;
         let mut config: Config = toml::from_str(&contents)?;
         config.apply_env_overrides();
+        config.migrate_legacy_ids();
         config.normalize();
         Ok(config)
     }
@@ -315,6 +325,16 @@ impl Config {
         })?;
         tracing::info!(path = %path.display(), "saved config");
         Ok(())
+    }
+
+    /// Rewrite spike-era portal ids. Returns true when a field changed.
+    pub fn migrate_legacy_ids(&mut self) -> bool {
+        if self.hotkey.app_id == LEGACY_APP_ID {
+            self.hotkey.app_id = APP_ID.to_string();
+            true
+        } else {
+            false
+        }
     }
 
     fn normalize(&mut self) {
@@ -529,5 +549,20 @@ autostart = true
 "#;
         let config: Config = toml::from_str(toml).expect("parse");
         assert!(config.general.show_overlay);
+    }
+
+    #[test]
+    fn default_app_id_is_stable_flathub_id() {
+        assert_eq!(Config::default().hotkey.app_id, APP_ID);
+        assert_eq!(APP_ID, "io.github.Typist01.FlowLinux");
+    }
+
+    #[test]
+    fn migrates_spike_hotkey_app_id() {
+        let mut config = Config::default();
+        config.hotkey.app_id = LEGACY_APP_ID.to_string();
+        assert!(config.migrate_legacy_ids());
+        assert_eq!(config.hotkey.app_id, APP_ID);
+        assert!(!config.migrate_legacy_ids());
     }
 }
