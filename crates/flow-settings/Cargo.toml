@@ -1,6 +1,6 @@
 [package]
 name = "flow-settings"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license.workspace = true
 
@@ -9,4 +9,5 @@ crossbeam-channel = "0.5"
 eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 flow-config = { path = "../flow-config" }
 flow-secrets = { path = "../flow-secrets" }
+flow-stt = { path = "../flow-stt" }
 tracing = "0.1"

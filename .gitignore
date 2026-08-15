@@ -22,6 +22,9 @@ spike-output.wav
 secrets/
 **/config.toml.local
 
+# Generated Flathub cargo vendor list
+packaging/flatpak/cargo-sources.json
+
 # AppImage build output
 packaging/appimage/out/
 packaging/appimage/AppDir/usr/bin/

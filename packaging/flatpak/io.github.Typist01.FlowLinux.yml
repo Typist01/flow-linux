@@ -1,0 +1,53 @@
+# Flathub-oriented manifest. Offline cargo vendors live in cargo-sources.json
+# (generate with ./packaging/flatpak/generate-cargo-sources.sh before submit).
+app-id: io.github.Typist01.FlowLinux
+runtime: org.freedesktop.Platform
+runtime-version: "24.08"
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.llvm18
+command: flow-daemon
+finish-args:
+  # Microphone
+  - --socket=pulseaudio
+  # Overlay currently opens an X11/XWayland window; Wayland for clipboard.
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  # Whisper download + optional BYOK OpenAI
+  - --share=network
+  # ydotool → /dev/uinput. No narrower Flatpak flag exists. Justified in the
+  # Flathub submission: text injection into the focused app on Wayland.
+  - --device=all
+  - --talk-name=org.freedesktop.portal.Desktop
+  - --talk-name=org.freedesktop.impl.portal.PermissionStore
+  - --talk-name=org.freedesktop.secrets
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.freedesktop.Flatpak
+  - --filesystem=xdg-run/ydotool:create
+  - --filesystem=/tmp/.ydotool_socket:rw
+  - --env=RUST_LOG=info
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/llvm18/bin
+  env:
+    CARGO_HOME: /run/build/flow-linux/cargo
+    CARGO_TARGET_DIR: /run/build/flow-linux/target
+modules:
+  - name: flow-linux
+    buildsystem: simple
+    build-commands:
+      - cargo --offline build --release -p flow-daemon
+      - install -Dm755 target/release/flow-daemon /app/bin/flow-daemon
+      - install -Dm644 packaging/appimage/AppDir/usr/share/applications/flow-linux.desktop /app/share/applications/io.github.Typist01.FlowLinux.desktop
+      - desktop-file-edit --set-key=Exec --set-value=flow-daemon --set-key=Icon --set-value=io.github.Typist01.FlowLinux /app/share/applications/io.github.Typist01.FlowLinux.desktop
+      - install -Dm644 assets/icons/flow-linux-256.png /app/share/icons/hicolor/256x256/apps/io.github.Typist01.FlowLinux.png
+      - install -Dm644 packaging/flatpak/io.github.Typist01.FlowLinux.metainfo.xml /app/share/metainfo/io.github.Typist01.FlowLinux.metainfo.xml
+    sources:
+      - type: git
+        url: https://github.com/Typist01/flow-linux.git
+        tag: v0.2.0
+        # Replace after the public tag exists:
+        # commit: REPLACE_WITH_TAG_COMMIT
+      - cargo-sources.json

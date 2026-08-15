@@ -9,8 +9,9 @@ SYSTEMD_UNIT_SRC="$PROJECT_ROOT/packaging/systemd/flow-daemon.service"
 SYSTEMD_UNIT_DEST="$HOME/.config/systemd/user/flow-daemon.service"
 AUTOSTART_SRC="$PROJECT_ROOT/assets/autostart/flow-linux.desktop"
 AUTOSTART_DEST="$HOME/.config/autostart/flow-linux.desktop"
-DESKTOP_SRC="$PROJECT_ROOT/assets/io.flowlinux.SpikeHotkey.desktop"
-DESKTOP_DEST="$HOME/.local/share/applications/io.flowlinux.SpikeHotkey.desktop"
+DESKTOP_SRC="$PROJECT_ROOT/assets/io.github.Typist01.FlowLinux.desktop"
+DESKTOP_DEST="$HOME/.local/share/applications/io.github.Typist01.FlowLinux.desktop"
+LEGACY_DESKTOP="$HOME/.local/share/applications/io.flowlinux.SpikeHotkey.desktop"
 
 if [[ ! -x "$BINARY" ]]; then
   echo "Binary not found: $BINARY"
@@ -27,6 +28,7 @@ mkdir -p "$HOME/.config/autostart"
 
 # KDE portal registration (required for global hotkey)
 sed -E "s|^Exec=.*|Exec=$BINARY|" "$DESKTOP_SRC" > "$DESKTOP_DEST"
+rm -f "$LEGACY_DESKTOP"
 
 # systemd user service with absolute binary path
 sed -E "s|^ExecStart=.*|ExecStart=$BINARY|" "$SYSTEMD_UNIT_SRC" > "$SYSTEMD_UNIT_DEST"

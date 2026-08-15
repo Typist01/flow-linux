@@ -1,12 +1,15 @@
 use crossbeam_channel::Sender;
 use eframe::egui;
 use flow_config::catalogs::{polish_provider_label, stt_mode_label, stt_provider_label};
+use flow_config::health::{CheckState, HealthSnapshot};
 use flow_config::{Config, PolishProvider, SttMode, SttProvider};
 use flow_secrets::{
     has_openai_api_key, store_openai_api_key, validate_configured_openai_api_key,
     validate_openai_api_key,
 };
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::thread;
+use std::time::{Duration, Instant};
 
 static OPEN_TX: OnceLock<Sender<()>> = OnceLock::new();
 
@@ -45,23 +48,46 @@ enum SettingsPage {
     About,
 }
 
+struct DownloadProgress {
+    fraction: f32,
+    message: String,
+    done: bool,
+    error: Option<String>,
+}
+
 pub struct SettingsApp {
     config: Config,
     openai_api_key: String,
     status_message: Option<(String, bool)>,
     reload_tx: Sender<()>,
     page: SettingsPage,
+    download: Option<Arc<Mutex<DownloadProgress>>>,
+    health: HealthSnapshot,
+    health_at: Instant,
 }
 
 impl SettingsApp {
     pub fn new(reload_tx: Sender<()>) -> Self {
+        let config = Config::load();
+        let health = HealthSnapshot::collect(&config, has_openai_api_key());
         Self {
-            config: Config::load(),
+            config,
             openai_api_key: String::new(),
             status_message: None,
             reload_tx,
             page: SettingsPage::Ready,
+            download: None,
+            health,
+            health_at: Instant::now(),
         }
+    }
+
+    fn health(&mut self) -> HealthSnapshot {
+        if self.health_at.elapsed() > Duration::from_millis(800) {
+            self.health = HealthSnapshot::collect(&self.config, has_openai_api_key());
+            self.health_at = Instant::now();
+        }
+        self.health.clone()
     }
 
     fn set_status(&mut self, message: impl Into<String>, success: bool) {
@@ -138,6 +164,10 @@ impl SettingsApp {
 
     /// Draw the settings instrument panel.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
+        self.poll_download();
+        if self.download.is_some() {
+            ui.ctx().request_repaint();
+        }
         self.ready_card(ui);
         ui.add_space(10.0);
 
@@ -179,7 +209,7 @@ impl SettingsApp {
         });
     }
 
-    fn ready_card(&self, ui: &mut egui::Ui) {
+    fn ready_card(&mut self, ui: &mut egui::Ui) {
         egui::Frame::NONE
             .fill(SURFACE)
             .corner_radius(12.0)
@@ -189,7 +219,7 @@ impl SettingsApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Ready to dictate").strong().size(16.0));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let ready = self.is_ready();
+                        let ready = self.health().is_ready();
                         chip(
                             ui,
                             if ready { "Ready" } else { "Needs setup" },
@@ -244,14 +274,88 @@ impl SettingsApp {
             });
     }
 
-    fn is_ready(&self) -> bool {
-        match self.config.stt.mode {
-            SttMode::Streaming => has_openai_api_key(),
-            SttMode::Batch => match self.config.stt.provider {
-                SttProvider::Openai => has_openai_api_key(),
-                SttProvider::Local => self.config.model_path().exists(),
-                SttProvider::Deepgram => false,
-            },
+    fn poll_download(&mut self) {
+        let Some(progress) = self.download.clone() else {
+            return;
+        };
+        let snapshot = progress.lock().unwrap();
+        if let Some(error) = snapshot.error.clone() {
+            drop(snapshot);
+            self.download = None;
+            self.set_status(error, false);
+            return;
+        }
+        if snapshot.done {
+            drop(snapshot);
+            self.download = None;
+            let _ = self.reload_tx.send(());
+            self.set_status("Whisper model downloaded — ready for local STT", true);
+        }
+    }
+
+    fn start_model_download(&mut self) {
+        if self.download.is_some() {
+            return;
+        }
+        let model = self.config.stt.model.clone();
+        let dest = self.config.model_path();
+        let progress = Arc::new(Mutex::new(DownloadProgress {
+            fraction: 0.0,
+            message: "Starting download…".into(),
+            done: false,
+            error: None,
+        }));
+        self.download = Some(Arc::clone(&progress));
+        thread::spawn(move || {
+            let result = flow_stt::download_local_model(&model, &dest, |got, total| {
+                let mut state = progress.lock().unwrap();
+                state.fraction = match total {
+                    Some(total) if total > 0 => got as f32 / total as f32,
+                    _ => 0.0,
+                };
+                state.message = match total {
+                    Some(total) => format!(
+                        "Downloading ggml-{model}.bin ({:.1} / {:.1} MB)",
+                        got as f32 / 1_000_000.0,
+                        total as f32 / 1_000_000.0
+                    ),
+                    None => format!("Downloading ggml-{model}.bin ({got} bytes)"),
+                };
+            });
+            let mut state = progress.lock().unwrap();
+            match result {
+                Ok(()) => {
+                    state.fraction = 1.0;
+                    state.done = true;
+                    state.message = "Download complete".into();
+                }
+                Err(e) => {
+                    state.error = Some(format!("Model download failed: {e}"));
+                }
+            }
+        });
+    }
+
+    fn download_ui(&mut self, ui: &mut egui::Ui) {
+        if let Some(progress) = &self.download {
+            let state = progress.lock().unwrap();
+            ui.add(egui::ProgressBar::new(state.fraction).text(&state.message));
+            return;
+        }
+
+        let local = self.config.stt.mode == SttMode::Batch
+            && self.config.stt.provider == SttProvider::Local;
+        if !local {
+            return;
+        }
+        let missing = !self.config.model_path().exists();
+        let label = if missing {
+            "Download Whisper model"
+        } else {
+            "Re-verify / re-download Whisper model"
+        };
+        if ui.button(label).clicked() {
+            self.start_model_download();
         }
     }
 
@@ -284,64 +388,19 @@ impl SettingsApp {
         ui.label("Am I ready to dictate? Fix anything red, then Save.");
         ui.add_space(8.0);
 
-        status_row(
-            ui,
-            "Speech mode",
-            if self.config.stt.is_streaming() {
-                "Streaming (live)"
-            } else {
-                "Batch (upload on release)"
-            },
-            true,
-        );
-        status_row(
-            ui,
-            "OpenAI API key",
-            if has_openai_api_key() {
-                "Configured (keyring or env)"
-            } else {
-                "Missing — set under Voice"
-            },
-            has_openai_api_key()
-                || matches!(
-                    (self.config.stt.mode, self.config.stt.provider),
-                    (SttMode::Batch, SttProvider::Local)
-                ),
-        );
-        if self.config.stt.mode == SttMode::Batch && self.config.stt.provider == SttProvider::Local
-        {
-            let ok = self.config.model_path().exists();
+        let health = self.health();
+        for check in &health.checks {
             status_row(
                 ui,
-                "Local Whisper model",
-                if ok {
-                    "Found on disk"
-                } else {
-                    "Missing — see Voice page"
-                },
-                ok,
+                check.label,
+                &check.detail,
+                check.state,
+                check.fix.as_deref(),
             );
         }
-        status_row(
-            ui,
-            "Listening overlay",
-            if self.config.general.show_overlay {
-                "Enabled"
-            } else {
-                "Disabled"
-            },
-            true,
-        );
-        status_row(
-            ui,
-            "Injection",
-            if self.config.inject.via_paste {
-                "Clipboard paste"
-            } else {
-                "ydotool type"
-            },
-            true,
-        );
+
+        ui.add_space(8.0);
+        self.download_ui(ui);
 
         ui.add_space(12.0);
         ui.label(
@@ -460,6 +519,8 @@ impl SettingsApp {
                     "Local model path: {}",
                     self.config.model_path().display()
                 ));
+                ui.add_space(6.0);
+                self.download_ui(ui);
             }
         }
 
@@ -585,7 +646,9 @@ impl SettingsApp {
         ui.label("Signal identity — voice as a flowing current that settles into text.");
         ui.add_space(8.0);
         ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
-        ui.label("License: see repository LICENSE / OFL fonts in assets/ATTRIBUTIONS.md");
+        ui.label("KDE Wayland first. Other desktops are experimental.");
+        ui.label("https://github.com/Typist01/flow-linux");
+        ui.label("License: MIT OR Apache-2.0. Fonts: SIL OFL (assets/ATTRIBUTIONS.md).");
         ui.add_space(8.0);
         ui.label(egui::RichText::new("Bring your own key (BYOK)").strong());
         ui.label("No API keys are bundled. Keys live in your system keyring or OPENAI_API_KEY.");
@@ -608,16 +671,26 @@ fn chip(ui: &mut egui::Ui, text: &str, accent: egui::Color32) {
         });
 }
 
-fn status_row(ui: &mut egui::Ui, label: &str, value: &str, ok: bool) {
+fn status_row(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: &str,
+    state: CheckState,
+    fix: Option<&str>,
+) {
+    let color = match state {
+        CheckState::Ok => TEAL,
+        CheckState::Fail => EMBER,
+        CheckState::Unknown => MUTED,
+    };
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new(label).color(MUTED));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(
-                egui::RichText::new(value)
-                    .color(if ok { TEAL } else { EMBER })
-                    .strong(),
-            );
+            ui.label(egui::RichText::new(value).color(color).strong());
         });
     });
+    if let Some(fix) = fix {
+        ui.label(egui::RichText::new(fix).small().color(MUTED));
+    }
     ui.add_space(4.0);
 }

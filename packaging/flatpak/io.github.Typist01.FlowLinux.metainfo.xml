@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.Typist01.FlowLinux</id>
+  <name>Flow Linux</name>
+  <summary>Hold-to-talk voice dictation for KDE Wayland</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <developer id="io.github.Typist01">
+    <name>Typist01</name>
+  </developer>
+  <description>
+    <p>
+      Flow Linux is a push-to-talk dictation daemon. Hold a global hotkey, speak,
+      release, and the transcript is pasted into the focused app.
+    </p>
+    <p>
+      It targets KDE Wayland. Speech can run offline with a local Whisper model
+      (downloaded on demand) or with your own OpenAI API key. No keys are bundled.
+    </p>
+    <p>
+      Host tools are still required: PipeWire, wl-clipboard, a ydotool user
+      service, and the desktop portal. The in-app Ready page reports mute,
+      hotkey, model, and injection problems.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.Typist01.FlowLinux.desktop</launchable>
+  <url type="homepage">https://github.com/Typist01/flow-linux</url>
+  <url type="bugtracker">https://github.com/Typist01/flow-linux/issues</url>
+  <url type="vcs-browser">https://github.com/Typist01/flow-linux</url>
+  <content_rating type="oars-1.1"/>
+  <recommends>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </recommends>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <categories>
+    <category>Utility</category>
+    <category>Accessibility</category>
+  </categories>
+  <keywords>
+    <keyword>dictation</keyword>
+    <keyword>speech</keyword>
+    <keyword>whisper</keyword>
+    <keyword>accessibility</keyword>
+  </keywords>
+  <releases>
+    <release version="0.2.0" date="2026-08-15">
+      <description>
+        <p>First public OSS release: Ready-bar diagnostics, in-app Whisper download, and a stable portal app id.</p>
+      </description>
+    </release>
+  </releases>
+</component>
